@@ -78,7 +78,7 @@ Go to **Dev Tools** (left sidebar) to run queries:
 GET macos-telemetry-esf-*/_search
 {
   "query": {
-    "term": {"event_name": "exec"}
+    "term": {"event.action": "exec"}
   },
   "size": 10,
   "sort": [{"@timestamp": {"order": "desc"}}]
@@ -90,7 +90,7 @@ GET macos-telemetry-esf-*/_search
 GET macos-telemetry-esf-*/_search
 {
   "query": {
-    "match": {"Image": "/usr/bin/curl"}
+    "match": {"process.executable": "/usr/bin/curl"}
   },
   "size": 10
 }
@@ -102,7 +102,7 @@ GET macos-telemetry-esf-*/_search
 {
   "query": {
     "query_string": {
-      "query": "event_name:exec AND Image:(*\\/tmp OR *\\/var\\/tmp)"
+      "query": "event.action:exec AND process.executable:(*\\/tmp* OR *\\/var\\/tmp*)"
     }
   },
   "size": 10
@@ -157,13 +157,17 @@ To create custom visualizations:
 
 ## Useful Fields for Filtering
 
-- `event_name` - Event type (exec, fork, create, etc.)
-- `Image` - Process executable path
-- `CommandLine` - Full command line
-- `ProcessId` - Process ID
-- `ParentProcessId` - Parent process ID
-- `User` - Username
-- `event_type` - Numeric event type
+**ECS Fields (recommended):**
+- `event.action` - Event type (exec, fork, create, etc.)
+- `process.executable` - Process executable path
+- `process.command_line` - Full command line
+- `process.pid` - Process ID
+- `process.parent.pid` - Parent process ID
+- `process.user.name` - Username
+
+**Native ESF Fields:**
+- `esf.event_type` - Numeric ESF event type
+- `esf.event_name` - ESF event name
 
 ## Troubleshooting
 
@@ -176,14 +180,14 @@ docker logs kibana
 
 Verify Elasticsearch is accessible:
 ```bash
-curl http://localhost:9200
+curl -u elastic:changeme http://localhost:9200
 ```
 
 ### "Unable to fetch mapping" error
 
 Make sure you've:
-1. Created the index pattern correctly
-2. Index pattern matches actual indices (check with `curl "http://localhost:9200/_cat/indices?v"`)
+1. Created the data view correctly
+2. Data view pattern matches actual indices (check with `curl -u elastic:changeme "http://localhost:9200/_cat/indices?v"`)
 3. Wait a few minutes if indices were just created
 
 ### Kibana is slow

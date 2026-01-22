@@ -20,13 +20,13 @@
 2. **Or manually fix**:
    ```bash
    # Delete today's index (it will recreate with correct mapping)
-   curl -X DELETE http://localhost:9200/macos-telemetry-ul-$(date +%Y.%m.%d)
-   curl -X DELETE http://localhost:9200/macos-telemetry-esf-$(date +%Y.%m.%d)
+   curl -u elastic:changeme -X DELETE http://localhost:9200/macos-telemetry-ul-$(date +%Y.%m.%d)
+   curl -u elastic:changeme -X DELETE http://localhost:9200/macos-telemetry-esf-$(date +%Y.%m.%d)
    ```
 
 3. **Verify templates are active**:
    ```bash
-   curl http://localhost:9200/_index_template/macos-telemetry-*
+   curl -u elastic:changeme http://localhost:9200/_index_template/macos-telemetry-*
    ```
 
 4. **Wait for new events**: The collector will recreate the index with the correct mapping when it indexes the next event.
@@ -59,12 +59,12 @@ bash scripts/setup_elasticsearch_templates.sh
 bash scripts/wipe_elasticsearch.sh
 
 # Or manually delete each index
-INDICES=$(curl -s "http://localhost:9200/_cat/indices/macos-telemetry-*?h=index")
+INDICES=$(curl -s -u elastic:changeme "http://localhost:9200/_cat/indices/macos-telemetry-*?h=index")
 for index in $INDICES; do
-    curl -s -X DELETE "http://localhost:9200/$index?ignore_unavailable=true"
+    curl -s -u elastic:changeme -X DELETE "http://localhost:9200/$index?ignore_unavailable=true"
 done
 sleep 5
-curl -s -X POST "http://localhost:9200/_refresh"
+curl -s -u elastic:changeme -X POST "http://localhost:9200/_refresh"
 ```
 
 **Note:** If indices keep reappearing, stop any running collectors first:
@@ -85,16 +85,6 @@ pkill -f ul_collector.py
 - Missing or incorrect index patterns
 
 **Solution:**
-```bash
-# Run the comprehensive fix script
-bash scripts/fix_all_kibana_issues.sh
-
-# This will:
-# 1. Force delete all old indices
-# 2. Clean up duplicate data views
-# 3. Create fresh data views
-# 4. Check for broken detection rules
-```
 
 **Manual Fix:**
 1. Go to Kibana → Stack Management → Data Views
@@ -120,22 +110,21 @@ bash scripts/fix_all_kibana_issues.sh
 2. **Verify data view configuration:**
    ```bash
    # Check if data views exist
-   curl -s "http://localhost:5601/api/data_views" -H 'kbn-xsrf: true' | \
+   curl -s -u elastic:changeme "http://localhost:5601/api/data_views" -H 'kbn-xsrf: true' | \
      python3 -m json.tool | grep macos-telemetry
-   
-   # Fix data views
-   bash scripts/fix_kibana_errors.sh
    ```
+   
+   If missing, create data views in Kibana: Stack Management → Data Views
 
 3. **Verify Elasticsearch has data:**
    ```bash
-   curl -s "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"
-   curl -s "http://localhost:9200/macos-telemetry-ul-*/_count?pretty"
+   curl -s -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"
+   curl -s -u elastic:changeme "http://localhost:9200/macos-telemetry-ul-*/_count?pretty"
    ```
 
 4. **Generate fresh test data:**
    ```bash
-   bash scripts/e2e_test_all_event_types.sh
+   python3 scripts/generate_test_events.py
    ```
 
 ---
@@ -156,9 +145,7 @@ bash scripts/fix_all_kibana_issues.sh
    - Ensure field names match (use Discover to verify field names)
 
 3. **Verify data view exists:**
-   ```bash
-   bash scripts/fix_all_kibana_issues.sh
-   ```
+   Go to Kibana → Stack Management → Data Views and ensure your index pattern exists.
 
 ---
 
@@ -204,7 +191,7 @@ python3 collectors/esf_collector.py --output elasticsearch --no-filtering
 
 3. **Check Elasticsearch is running:**
    ```bash
-   curl http://localhost:9200
+   curl -u elastic:changeme http://localhost:9200
    ```
 
 4. **View collector logs:**
@@ -222,25 +209,27 @@ python3 collectors/esf_collector.py --output elasticsearch --no-filtering
 
 ```bash
 # Check Elasticsearch health
-curl http://localhost:9200/_cluster/health?pretty
+curl -u elastic:changeme http://localhost:9200/_cluster/health?pretty
 
 # List all indices
-curl http://localhost:9200/_cat/indices?v
+curl -u elastic:changeme http://localhost:9200/_cat/indices?v
 
 # Count events
-curl "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"
-curl "http://localhost:9200/macos-telemetry-ul-*/_count?pretty"
+curl -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"
+curl -u elastic:changeme "http://localhost:9200/macos-telemetry-ul-*/_count?pretty"
 
 # Check Kibana status
-curl http://localhost:5601/api/status
+curl -u elastic:changeme http://localhost:5601/api/status
 
 # List Kibana data views
-curl -s "http://localhost:5601/api/data_views" -H 'kbn-xsrf: true' | \
+curl -s -u elastic:changeme "http://localhost:5601/api/data_views" -H 'kbn-xsrf: true' | \
   python3 -m json.tool | grep -A 5 "macos-telemetry"
 
 # Check running collectors
 ps aux | grep -E "esf_collector|ul_collector"
 ```
+
+**Note**: If you've configured credentials in Keychain (`./scripts/setup_credentials.sh`), scripts will use those automatically.
 
 ---
 
@@ -279,8 +268,8 @@ spctl --assess --verbose /Applications
 # Check status
 ps aux | grep ul_collector
 
-# Restart if needed
-ES_USER=elastic ES_PASSWORD=changeme python3 collectors/ul_collector.py --output elasticsearch &
+# Restart if needed (credentials from Keychain or env vars)
+python3 collectors/ul_collector.py --output elasticsearch &
 ```
 
 **3. Events Are Being Filtered**

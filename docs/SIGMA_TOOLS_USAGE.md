@@ -8,17 +8,18 @@ This codebase **actively uses** official Sigma and pySigma tools wherever possib
 
 ## ✅ Currently Using Official Tools
 
-### 1. **Sigma CLI (`sigma` command from `sigmatools`)** ✅
-
-**Location in codebase:**
-- `scripts/test_pipeline.sh` - Uses `sigma convert` for rule conversion
-- `scripts/convert_all_sigma.sh` - Uses `sigma convert` for batch conversion
-- Documentation examples show `sigma convert` usage
+### 1. **Sigma CLI (`sigma` command)** ✅
 
 **Example usage:**
 ```bash
-sigma convert -t lucene -p pipelines/macos_esf.yml rules/esf/process_execution_suspicious.yml
-sigma convert -t eql -p pipelines/macos_esf.yml rules/esf/process_execution_suspicious.yml
+# Convert ESF rule to Lucene query
+sigma convert -t elasticsearch -p ecs_macos_esf rules/esf/process_execution_suspicious.yml
+
+# Convert ESF rule to EQL
+sigma convert -t elasticsearch -f eql -p ecs_macos_esf rules/esf/process_execution_suspicious.yml
+
+# Convert UL rule
+sigma convert -t elasticsearch -p ecs_macos_ul rules/ul/tcc_bypass_attempt.yml
 ```
 
 **Status:** ✅ **Properly used**
@@ -30,25 +31,28 @@ sigma convert -t eql -p pipelines/macos_esf.yml rules/esf/process_execution_susp
 **Imports used:**
 ```python
 from sigma.collection import SigmaCollection
-from sigma.pipelines.pipeline import ProcessingPipeline
-from sigma.backends.elasticsearch import ElasticsearchLuceneBackend
+from sigma.backends.elasticsearch import LuceneBackend, EqlBackend
+from sigma.pipelines.elasticsearch import ecs_macos_esf, ecs_macos_ul
 ```
 
 **Files using pySigma:**
-- `scripts/verify_sigma_alerts.py` - Uses pySigma to load rules and convert to ES queries
-- `tests/test_e2e.py` - Uses pySigma for pipeline loading and rule conversion
+- `scripts/deploy_sigma_rules.py` - Converts and deploys rules to Kibana Detection Engine
 
 **Example:**
 ```python
-# Load Sigma rules
-sigma_rules = SigmaCollection.from_directory(rules_dir)
+from sigma.collection import SigmaCollection
+from sigma.backends.elasticsearch import EqlBackend
+from sigma.pipelines.elasticsearch import ecs_macos_esf
 
-# Load pipeline
-pipeline = ProcessingPipeline.from_yaml(pipeline_file)
+# Load Sigma rules
+rules = SigmaCollection.from_yaml(rule_file)
+
+# Get pipeline
+pipeline = ecs_macos_esf()
 
 # Convert using backend
-backend = ElasticsearchLuceneBackend(processing_pipeline=pipeline)
-queries = backend.convert_rule(rule)
+backend = EqlBackend(pipeline)
+queries = backend.convert(rules)
 ```
 
 **Status:** ✅ **Properly used**
@@ -68,16 +72,15 @@ queries = backend.convert_rule(rule)
 
 ---
 
-### 4. **YAML Pipeline Format** ✅
+### 4. **Built-in Pipelines** ✅
 
 **Using:**
-- Native pySigma YAML pipeline support via `ProcessingPipeline.from_yaml()`
+- `ecs_macos_esf()` - Built into pySigma-backend-elasticsearch for ESF events
+- `ecs_macos_ul()` - Built into pySigma-backend-elasticsearch for UL events
 
-**Files:**
-- `pipelines/macos_esf.yml` - YAML pipeline
-- `pipelines/macos_ul.yml` - YAML pipeline
+**Status:** ✅ **Using official pipelines from pySigma-backend-elasticsearch**
 
-**Status:** ✅ **Using official pipeline format**
+**Note:** Local YAML pipelines in `pipelines/` are for reference only. Production use relies on the built-in pipelines.
 
 ---
 
@@ -94,74 +97,40 @@ pysigma-backend-elasticsearch>=1.0.0  # Official ES backend
 
 ---
 
-## 🔍 Areas to Review
+## 🔍 Implementation Notes
 
-### 1. **Custom Backend Directory**
+### Rule Deployment
 
-**Location:** `backends/elasticsearch_esf_ul/__init__.py`
+**Script:** `scripts/deploy_sigma_rules.py`
 
-**Question:** Is this a custom backend or using the official one?
+This script:
+1. Loads Sigma rules from `rules/esf/` and `rules/ul/`
+2. Converts using pySigma with appropriate backend:
+   - ESF rules → EQL backend with `ecs_macos_esf()` pipeline
+   - UL rules → Lucene backend with `ecs_macos_ul()` pipeline
+3. Deploys as Kibana Detection Rules via API
 
-**Current status:** Appears to be a placeholder/wrapper. We should verify if we can use the official `pysigma-backend-elasticsearch` directly.
+### Pipeline Strategy
 
-**Recommendation:** 
-- If we're just wrapping the official backend → Use official directly
-- If we need custom logic → Document why custom implementation is needed
+| Rule Type | Backend | Pipeline | Query Language |
+|-----------|---------|----------|----------------|
+| ESF | `EqlBackend` | `ecs_macos_esf()` | EQL |
+| UL | `LuceneBackend` | `ecs_macos_ul()` | Lucene |
 
----
-
-### 2. **Rule Validation**
-
-**Current:** Custom `lint_sigma.py` script
-
-**Could use:** 
-- `sigma validate` or `sigma check` (if available)
-- Official pySigma validation methods
-
-**Current approach:**
-```python
-# lint_sigma.py attempts to use CLI but falls back to custom validation
-subprocess.call(["sigma", "validate", "-r", str(RULES_DIR)])
-```
-
-**Status:** ⚠️ **Partially using CLI, has fallback**
-
-**Recommendation:** Enhance to fully use `sigma validate` if available
-
----
-
-### 3. **Rule Conversion Scripts**
-
-**Current:** Using `sigma convert` CLI ✅
-
-**Files:**
-- `scripts/test_pipeline.sh` - Uses `sigma convert`
-- `scripts/convert_all_sigma.sh` - Uses `sigma convert`
-
-**Status:** ✅ **Using official CLI**
-
----
-
-### 4. **Pipeline Loading**
-
-**Current:** Using `ProcessingPipeline.from_yaml()` ✅
-
-**Files:**
-- `scripts/verify_sigma_alerts.py` - Uses official API
-- `tests/test_e2e.py` - Uses official API
-
-**Status:** ✅ **Using official API**
+**Why different backends?**
+- EQL is better for structured field queries (ESF events)
+- Lucene handles text field searches better (UL `message` field)
 
 ---
 
 ## ✅ Confirmation Checklist
 
-- [x] **Sigma CLI (`sigma convert`)** - Used in test and conversion scripts
-- [x] **pySigma Library** - Used for rule loading and conversion
+- [x] **Sigma CLI (`sigma convert`)** - Available for manual conversion
+- [x] **pySigma Library** - Used for programmatic rule deployment
 - [x] **Official Backends** - Using `pysigma-backend-elasticsearch`
-- [x] **YAML Pipelines** - Using official `ProcessingPipeline.from_yaml()`
-- [x] **Sigma Collection** - Using `SigmaCollection.from_directory()`
-- [x] **Backend Conversion** - Using official `backend.convert_rule()`
+- [x] **Built-in Pipelines** - Using `ecs_macos_esf()` and `ecs_macos_ul()`
+- [x] **Sigma Collection** - Using `SigmaCollection.from_yaml()`
+- [x] **Backend Conversion** - Using official `backend.convert()`
 - [x] **Dependencies** - All official packages in requirements.txt
 
 ---
@@ -169,51 +138,15 @@ subprocess.call(["sigma", "validate", "-r", str(RULES_DIR)])
 ## 📊 Usage Statistics
 
 **Official Tools Used:**
-- ✅ Sigma CLI (`sigma convert`) - 2 scripts
-- ✅ pySigma Library - 2 Python files
-- ✅ Official Backends - 1 backend package
-- ✅ Pipeline Loading - Official API
+- ✅ Sigma CLI (`sigma convert`) - Available for manual testing
+- ✅ pySigma Library - `deploy_sigma_rules.py`
+- ✅ Official Backends - `LuceneBackend`, `EqlBackend`
+- ✅ Built-in Pipelines - `ecs_macos_esf()`, `ecs_macos_ul()`
 
-**Custom Code:**
-- ⚠️ Custom linting (with CLI fallback)
-- ⚠️ Custom backend directory (needs review)
-- ✅ Custom collectors (necessary - data collection)
-- ✅ Custom event normalization (necessary - ESF/UL specific)
-
----
-
-## 🎯 Recommendations
-
-### 1. **Verify Custom Backend**
-Check if `backends/elasticsearch_esf_ul/` is actually needed or if we can use the official backend directly.
-
-### 2. **Enhance Validation**
-Ensure `lint_sigma.py` fully leverages `sigma validate` when available.
-
-### 3. **Document Custom Code**
-If any custom implementations are necessary (e.g., ESF-specific normalizations), document why official tools can't be used.
-
-### 4. **Use More CLI Tools**
-Consider using additional CLI tools if available:
-- `sigma validate` - Rule validation
-- `sigma check` - Rule checking
-- `sigma_uuid` - UUID generation (if we generate rules)
-
----
-
-## 📚 Official Tools Reference
-
-**Sigma CLI (sigmatools):**
-- `sigma convert` - Rule conversion ✅ Used
-- `sigma validate` - Rule validation ⚠️ Partially used
-- `sigma check` - Rule checking ⚠️ Not used
-- `sigma_uuid` - UUID generation ⚠️ Not used
-
-**pySigma Library:**
-- `SigmaCollection` - Rule loading ✅ Used
-- `ProcessingPipeline` - Pipeline handling ✅ Used
-- Backends - Query conversion ✅ Used
-- Rule objects - Rule manipulation ✅ Used
+**Custom Code (necessary):**
+- ✅ Data collectors (`esf_collector.py`, `ul_collector.py`) - macOS-specific
+- ✅ Event normalization - ESF/UL to ECS mapping
+- ✅ Rule deployment script - Kibana API integration
 
 ---
 

@@ -166,9 +166,9 @@ To verify filtering is working:
 
 ```bash
 # Check event distribution
-curl "http://localhost:9200/macos-telemetry-esf-*/_search?size=0" \
+curl -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_search?size=0" \
   -H 'Content-Type: application/json' \
-  -d '{"aggs":{"event_types":{"terms":{"field":"event_name.keyword","size":20}}}}'
+  -d '{"aggs":{"event_types":{"terms":{"field":"event.action.keyword","size":20}}}}'
 
 # Should see:
 # - mprotect: ~5K (not 1.28M)

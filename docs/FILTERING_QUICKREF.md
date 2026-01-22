@@ -100,9 +100,9 @@ if event_name == "setextattr":
 
 ```bash
 # Check event counts
-curl "http://localhost:9200/macos-telemetry-esf-*/_search?size=0" \
+curl -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_search?size=0" \
   -H 'Content-Type: application/json' \
-  -d '{"aggs":{"events":{"terms":{"field":"event_name.keyword","size":20}}}}'
+  -d '{"aggs":{"events":{"terms":{"field":"event.action.keyword","size":20}}}}'
 
 # Should show:
 # mprotect: ~5,000 (not 1.28M)
@@ -113,6 +113,5 @@ curl "http://localhost:9200/macos-telemetry-esf-*/_search?size=0" \
 ## Documentation
 
 - **Full Details**: `docs/FILTERING_CONFIGURATION.md`
-- **Change Log**: `docs/FILTERING_CHANGES.md`
-- **Code Location**: `collectors/esf_collector.py` (lines 38-247)
+- **Code Location**: `collectors/esf_collector.py`
 

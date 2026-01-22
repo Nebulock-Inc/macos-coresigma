@@ -46,7 +46,7 @@ We've already created saved searches for all Sigma rules. These work **without**
 
 2. **Run the script to list all:**
    ```bash
-   curl -s "http://localhost:5601/api/saved_objects/_find?type=search&search=Sigma" \
+   curl -s -u elastic:changeme "http://localhost:5601/api/saved_objects/_find?type=search&search=Sigma" \
      -H 'kbn-xsrf: true' | python3 -m json.tool
    ```
 
@@ -83,7 +83,7 @@ Detection Engine requires Elastic Security, which needs:
 
 **To check if available:**
 ```bash
-curl -s "http://localhost:5601/api/features" -H 'kbn-xsrf: true' | \
+curl -s -u elastic:changeme "http://localhost:5601/api/features" -H 'kbn-xsrf: true' | \
   python3 -c "import sys, json; features = json.load(sys.stdin).get('features', []); \
   security = [f for f in features if 'security' in f.get('id', '').lower()]; \
   print('Security features:', [f.get('id') for f in security[:5]])"
@@ -129,28 +129,20 @@ This error usually means:
 ### View Alerts (Saved Searches)
 ```bash
 # List all saved searches
-curl -s "http://localhost:5601/api/saved_objects/_find?type=search&per_page=20" \
+curl -s -u elastic:changeme "http://localhost:5601/api/saved_objects/_find?type=search&per_page=20" \
   -H 'kbn-xsrf: true' | python3 -m json.tool | grep -A 3 "Sigma"
-```
-
-### Recreate Saved Searches
-```bash
-bash scripts/create_kibana_alerts_saved_searches.sh
-```
-
-### Fix All Kibana Issues
-```bash
-bash scripts/fix_all_kibana_issues.sh
 ```
 
 ### Test a Query
 ```bash
 # Test ESF query
-curl -s "http://localhost:9200/macos-telemetry-esf-*/_search?q=event_name:exec&size=1&pretty"
+curl -s -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_search?q=event.action:exec&size=1&pretty"
 
 # Test UL query
-curl -s "http://localhost:9200/macos-telemetry-ul-*/_search?q=subsystem:com.apple.sudo&size=1&pretty"
+curl -s -u elastic:changeme "http://localhost:9200/macos-telemetry-ul-*/_search?q=ul.subsystem:com.apple.sudo&size=1&pretty"
 ```
+
+**Note**: If you've set up credentials in Keychain using `./scripts/setup_credentials.sh`, you can omit `-u elastic:changeme` from curl commands by using environment variables or the auth helper.
 
 ---
 
@@ -175,13 +167,14 @@ curl -s "http://localhost:9200/macos-telemetry-ul-*/_search?q=subsystem:com.appl
 → Use saved searches instead (Discover → Open saved search)
 
 ### "undefined: undefined"
-→ Run: `bash scripts/fix_all_kibana_issues.sh`
+→ Delete and recreate data views in Stack Management → Data Views
+→ Hard refresh browser (Cmd+Shift+R)
 
 ### No data in saved searches
 → Check time range in Discover (set to "Last 7 days")
-→ Verify events exist: `curl "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"`
+→ Verify events exist: `curl -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"`
 
 ### Saved searches show errors
-→ Fix data views: `bash scripts/fix_kibana_errors.sh`
+→ Recreate data views in Stack Management → Data Views
 → Hard refresh browser
 
