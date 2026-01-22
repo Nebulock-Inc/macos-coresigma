@@ -5,15 +5,54 @@
 set -e
 
 ES_URL="${ES_URL:-http://localhost:9200}"
-ES_USER="${ES_USER:-}"
-ES_PASSWORD="${ES_PASSWORD:-}"
+KEYCHAIN_SERVICE="coreSigma-Elasticsearch"
 
-# Build curl auth option
-if [ -n "$ES_USER" ] && [ -n "$ES_PASSWORD" ]; then
-    CURL_AUTH="-u ${ES_USER}:${ES_PASSWORD}"
-else
-    CURL_AUTH=""
-fi
+# Get credentials (priority: env vars > keychain)
+get_credentials() {
+    # Check environment variables first
+    if [ -n "$ES_API_KEY" ]; then
+        echo "api_key"
+        return
+    fi
+    
+    if [ -n "$ES_USER" ] && [ -n "$ES_PASSWORD" ]; then
+        echo "env"
+        return
+    fi
+    
+    # Try macOS Keychain
+    if command -v security &> /dev/null; then
+        if security find-generic-password -s "$KEYCHAIN_SERVICE" -a "elastic" -w &>/dev/null; then
+            echo "keychain"
+            return
+        fi
+    fi
+    
+    echo "none"
+}
+
+# Build curl auth options based on credential source
+AUTH_SOURCE=$(get_credentials)
+case "$AUTH_SOURCE" in
+    api_key)
+        CURL_AUTH="-H 'Authorization: ApiKey $ES_API_KEY'"
+        echo "Using API key authentication"
+        ;;
+    env)
+        CURL_AUTH="-u ${ES_USER}:${ES_PASSWORD}"
+        echo "Using environment variable credentials"
+        ;;
+    keychain)
+        KEYCHAIN_PASSWORD=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -a "elastic" -w 2>/dev/null)
+        CURL_AUTH="-u elastic:${KEYCHAIN_PASSWORD}"
+        echo "Using macOS Keychain credentials"
+        ;;
+    none)
+        CURL_AUTH=""
+        echo "⚠️  No credentials found - trying without authentication"
+        echo "   Set up credentials with: ./scripts/setup_credentials.sh"
+        ;;
+esac
 
 echo "========================================="
 echo "Setting up Elasticsearch Index Templates"

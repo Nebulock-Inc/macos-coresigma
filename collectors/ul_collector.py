@@ -79,7 +79,7 @@ class ULCollector:
         if output == "elasticsearch":
             try:
                 # Try relative import first (when used as a module)
-            try:
+                try:
                     from .auth import create_elasticsearch_client, AuthenticationError
                 except ImportError:
                     # Fall back to direct import (when run as a script)
