@@ -27,8 +27,8 @@ detection:
     - /dig
     - /nslookup
     - /host
-    - /dnscat
-    - /dnscat2
+    - dnscat
+    - dnscat2
   condition: selection_event and selection_process
 falsepositives:
 - Network troubleshooting and DNS diagnostics

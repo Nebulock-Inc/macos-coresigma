@@ -29,7 +29,7 @@ detection:
     - /gzip
     - /bzip2
     - /7z
-    - /rar
+    - rar
   condition: selection_event and selection_process
 falsepositives:
 - Legitimate file compression for backups

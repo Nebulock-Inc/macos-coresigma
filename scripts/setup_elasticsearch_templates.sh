@@ -5,6 +5,15 @@
 set -e
 
 ES_URL="${ES_URL:-http://localhost:9200}"
+ES_USER="${ES_USER:-}"
+ES_PASSWORD="${ES_PASSWORD:-}"
+
+# Build curl auth option
+if [ -n "$ES_USER" ] && [ -n "$ES_PASSWORD" ]; then
+    CURL_AUTH="-u ${ES_USER}:${ES_PASSWORD}"
+else
+    CURL_AUTH=""
+fi
 
 echo "========================================="
 echo "Setting up Elasticsearch Index Templates"
@@ -12,9 +21,10 @@ echo "========================================="
 echo ""
 
 # Check if Elasticsearch is running
-if ! curl -s "$ES_URL" > /dev/null; then
-    echo "❌ Elasticsearch is not running at $ES_URL"
+if ! curl -s $CURL_AUTH "$ES_URL" > /dev/null; then
+    echo "❌ Elasticsearch is not running at $ES_URL or authentication failed"
     echo "   Start it with: docker-compose up -d"
+    echo "   Or provide credentials: ES_USER=elastic ES_PASSWORD=changeme $0"
     exit 1
 fi
 
@@ -30,14 +40,14 @@ create_template() {
     echo "Creating/updating template: $template_name"
     
     # Check if template exists
-    if curl -s "$ES_URL/_index_template/$template_name" | grep -q "\"$template_name\""; then
+    if curl -s $CURL_AUTH "$ES_URL/_index_template/$template_name" | grep -q "\"$template_name\""; then
         echo "  ⚠️  Template exists, updating..."
     else
         echo "  Creating new template..."
     fi
     
     # Create/update template
-    RESPONSE=$(curl -s -X PUT "$ES_URL/_index_template/$template_name" \
+    RESPONSE=$(curl -s $CURL_AUTH -X PUT "$ES_URL/_index_template/$template_name" \
         -H 'Content-Type: application/json' \
         -d "$template_body")
     

@@ -6,7 +6,7 @@
 
 CoreSigma provides:
 
-- **50 Detection Rules** - 38 ESF rules and 12 UL rules covering process execution, file events, authentication, privilege escalation, persistence, and more
+- **57 Detection Rules** - 38 ESF rules and 19 UL rules covering process execution, file events, authentication, privilege escalation, persistence, and more
 - **ECS-Compatible Data Collection** - Collectors that normalize ESF/UL events to Elastic Common Schema (ECS) format
 - **Intelligent Filtering** - Reduces log volume by ~98.5% while preserving 100% security-relevant events
 - **Kibana Dashboards** - Pre-built security dashboards for real-time monitoring

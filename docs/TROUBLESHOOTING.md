@@ -244,6 +244,70 @@ ps aux | grep -E "esf_collector|ul_collector"
 
 ---
 
+---
+
+## Unified Logging (UL) Collector Issues
+
+### How UL Collector Works
+
+The UL collector uses macOS `log stream` command, which:
+- Captures NEW events in real-time
+- Does NOT capture historical events
+- Only shows events that happen WHILE the collector is running
+
+### Why You Might Not See UL Data
+
+**1. No Security Events Are Happening**
+
+`log stream` only shows events as they occur. If no security-relevant events happen, there's nothing to collect.
+
+**Generate test activity:**
+```bash
+# TCC event - try to access Photos
+open -a Photos
+
+# Sudo event - run sudo command
+sudo -n echo test
+
+# Gatekeeper event - check app assessment
+spctl --assess --verbose /Applications
+```
+
+**2. Collector Stopped Running**
+
+```bash
+# Check status
+ps aux | grep ul_collector
+
+# Restart if needed
+ES_USER=elastic ES_PASSWORD=changeme python3 collectors/ul_collector.py --output elasticsearch &
+```
+
+**3. Events Are Being Filtered**
+
+The collector only monitors these security subsystems:
+- `com.apple.TCC`
+- `com.apple.sudo`
+- `com.apple.gatekeeper`
+- `com.apple.syspolicy`
+- `com.apple.securityd`
+- `com.apple.alf`
+- `com.apple.opendirectoryd`
+- `com.apple.authorization`
+
+Events from other subsystems won't be collected.
+
+### UL vs ESF Collector Comparison
+
+| Feature | ESF Collector | UL Collector |
+|---------|---------------|--------------|
+| Data Source | `eslogger` (real-time) | `log stream` (real-time) |
+| Historical Events | No | No (captures last 5 min on startup) |
+| Event Frequency | Very high (filtered) | Lower (security events only) |
+| Volume | ~30K events/day (filtered) | ~100-1000 events/day |
+
+---
+
 ## Getting Help
 
 If issues persist:

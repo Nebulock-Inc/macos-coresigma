@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Check actual field mappings in Elasticsearch."""
 
-import json
 import os
 import requests
 

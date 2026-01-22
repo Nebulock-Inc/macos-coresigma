@@ -294,22 +294,26 @@ class ESFCollector:
         
         if output == "elasticsearch":
             try:
-                from elasticsearch import Elasticsearch
-                es_url_final = es_url if es_url else 'http://localhost:9200'
-                # Parse URL to extract credentials or use defaults
-                es_user = os.environ.get('ES_USER', 'elastic')
-                es_password = os.environ.get('ES_PASSWORD', 'changeme')
-                self.es_client = Elasticsearch(
-                    [es_url_final],
-                    basic_auth=(es_user, es_password)
-                )
+                # Try relative import first (when used as a module)
                 try:
-                    self.es_client.info()  # Test connection
-                    print(f"✅ Connected to Elasticsearch: {es_url_final}", file=sys.stderr)
+                    from .auth import create_elasticsearch_client, AuthenticationError
+                except ImportError:
+                    # Fall back to direct import (when run as a script)
+                    from auth import create_elasticsearch_client, AuthenticationError
+                
+                es_url_final = es_url if es_url else 'http://localhost:9200'
+                try:
+                    self.es_client = create_elasticsearch_client(es_url_final)
+                    info = self.es_client.info()
+                    print(f"✅ Connected to Elasticsearch: {es_url_final} (cluster: {info['cluster_name']})", file=sys.stderr)
+                except AuthenticationError as e:
+                    print(f"❌ Authentication error: {e}", file=sys.stderr)
+                    self.es_client = None
                 except Exception as e:
-                    print(f"⚠️  Elasticsearch connection test failed: {e}", file=sys.stderr)
-            except ImportError:
-                print("❌ ERROR: elasticsearch module not found", file=sys.stderr)
+                    print(f"⚠️  Elasticsearch connection failed: {e}", file=sys.stderr)
+                    self.es_client = None
+            except ImportError as e:
+                print(f"❌ ERROR: {e}", file=sys.stderr)
                 self.es_client = None
         
         signal.signal(signal.SIGINT, self._signal_handler)

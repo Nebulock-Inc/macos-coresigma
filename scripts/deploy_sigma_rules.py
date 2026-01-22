@@ -20,19 +20,67 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from sigma.collection import SigmaCollection
-    from sigma.backends.elasticsearch import LuceneBackend
+    from sigma.backends.elasticsearch import EqlBackend, LuceneBackend
     from sigma.pipelines.elasticsearch import ecs_macos_esf
+    from sigma.processing.pipeline import ProcessingPipeline, ProcessingItem
+    from sigma.processing.transformations import FieldMappingTransformation
+    from sigma.processing.conditions import LogsourceCondition
 except ImportError:
     print("ERROR: pySigma not installed. Run: pip install pysigma pysigma-backend-elasticsearch")
     sys.exit(1)
 
+
+def ecs_macos_ul() -> ProcessingPipeline:
+    """
+    Simple field mapping for macOS Unified Logging rules.
+    Maps Sigma field names to the UL collector's field names.
+    """
+    field_mappings = {
+        "subsystem": "ul.subsystem",
+        "category": "ul.category",
+        # message is used as-is (text field for full-text search)
+    }
+    
+    return ProcessingPipeline(
+        name="macOS Unified Logging (UL) field mappings",
+        priority=30,
+        items=[
+            ProcessingItem(
+                identifier="ecs_macos_ul_field_mapping",
+                transformation=FieldMappingTransformation(field_mappings),
+                rule_conditions=[
+                    LogsourceCondition(product="macos", service="unifiedlog")
+                ],
+            ),
+        ]
+    )
+
 # Configuration
 KIBANA_URL = os.getenv("KIBANA_URL", "http://localhost:5601")
-ES_INDEX_PATTERN = os.getenv("ES_INDEX", "macos-telemetry-esf-*")
-ES_USER = os.getenv("ES_USER", "elastic")
-ES_PASS = os.getenv("ES_PASS", "changeme")
-ES_AUTH = (ES_USER, ES_PASS)
+ES_INDEX_ESF = os.getenv("ES_INDEX_ESF", "macos-telemetry-esf-*")
+ES_INDEX_UL = os.getenv("ES_INDEX_UL", "macos-telemetry-ul-*")
 HEADERS = {"kbn-xsrf": "true", "Content-Type": "application/json"}
+
+# Authentication - try to use centralized auth module
+def get_auth():
+    """Get authentication credentials."""
+    try:
+        sys.path.insert(0, str(Path(__file__).parent.parent / "collectors"))
+        from auth import get_kibana_auth
+        return get_kibana_auth()
+    except (ImportError, Exception):
+        # Fallback to environment variables
+        es_user = os.getenv("ES_USER")
+        es_password = os.getenv("ES_PASSWORD")
+        if es_user and es_password:
+            return (es_user, es_password)
+        raise ValueError(
+            "No authentication configured.\n"
+            "Set ES_USER and ES_PASSWORD environment variables, or configure via:\n"
+            "  python collectors/auth.py store -u elastic"
+        )
+
+ES_AUTH = None  # Lazy-loaded
 
 # Severity mapping from Sigma to Elastic
 SEVERITY_MAP = {
@@ -76,24 +124,84 @@ def load_sigma_rules(rules_dir: Path) -> list:
     return rules
 
 
-def convert_sigma_to_lucene(sigma_rule, yaml_content: str) -> str:
-    """Convert a Sigma rule to Lucene query using the macOS ESF pipeline."""
+def fix_eql_numeric_fields(query: str) -> str:
+    """Fix EQL queries to use == instead of : for numeric fields.
+    
+    EQL requires == for numeric comparisons, but pySigma generates : for all fields.
+    This function converts known numeric fields from:
+      - field:value to field == value
+      - field like~ (1, 2, 3) to field in (1, 2, 3)
+    """
+    import re
+    
+    # Known numeric fields in ESF/UL telemetry
+    numeric_fields = [
+        'esf.event_type',
+        'process.pid',
+        'process.parent.pid',
+        'process.user.id',
+        'process.real_user.id',
+        'process.group.id',
+        'process.real_group.id',
+        'user.id',
+        'user.target.id',
+        'destination.port',
+        'source.port',
+        'signal.number',
+        'ptrace.request',
+    ]
+    
+    result = query
+    for field in numeric_fields:
+        # Fix single value: field:123 -> field == 123
+        pattern = rf'({re.escape(field)}):(\d+)'
+        result = re.sub(pattern, r'\1 == \2', result)
+        
+        # Fix list of values: field like~ (1, 2, 3) -> field in (1, 2, 3)
+        pattern = rf'{re.escape(field)} like~ \(([0-9,\s]+)\)'
+        result = re.sub(pattern, rf'{field} in (\1)', result)
+    
+    return result
+
+
+def convert_sigma_rule(sigma_rule, yaml_content: str, is_ul_rule: bool = False) -> tuple:
+    """Convert a Sigma rule to query language.
+    
+    Args:
+        sigma_rule: The parsed Sigma rule object
+        yaml_content: The raw YAML content of the rule
+        is_ul_rule: True if this is a Unified Logging rule, False for ESF
+        
+    Returns:
+        tuple: (query_string, query_type, query_language)
+            - For ESF: (eql_query, "eql", "eql")
+            - For UL: (lucene_query, "query", "lucene")
+    """
     try:
         # Parse the YAML content directly
         collection = SigmaCollection.from_yaml(yaml_content)
         
-        # Use the ECS macOS ESF pipeline
-        backend = LuceneBackend(ecs_macos_esf())
+        if is_ul_rule:
+            # UL rules use Lucene backend (supports text field queries like 'message')
+            # with UL-specific field mapping
+            backend = LuceneBackend(ecs_macos_ul())
+            queries = backend.convert(collection)
+            
+            if queries:
+                return (queries[0], "query", "lucene")
+        else:
+            # ESF rules use EQL backend with ECS macOS ESF pipeline
+            backend = EqlBackend(ecs_macos_esf())
+            queries = backend.convert(collection)
+            
+            if queries:
+                # Fix numeric field comparisons for EQL compatibility
+                return (fix_eql_numeric_fields(queries[0]), "eql", "eql")
         
-        # Convert to Lucene query
-        queries = backend.convert(collection)
-        
-        if queries:
-            return queries[0]
-        return None
+        return (None, None, None)
     except Exception as e:
         print(f"    Conversion error: {e}")
-        return None
+        return (None, None, None)
 
 
 def get_mitre_mapping(sigma_rule) -> list:
@@ -169,20 +277,38 @@ def get_mitre_mapping(sigma_rule) -> list:
     return threats
 
 
-def create_detection_rule(sigma_rule, lucene_query: str, file_path: Path) -> dict:
-    """Create a Kibana Detection Rule payload from a Sigma rule."""
+def create_detection_rule(sigma_rule, query: str, query_type: str, query_language: str, file_path: Path) -> dict:
+    """Create a Kibana Detection Rule payload from a Sigma rule.
     
+    Args:
+        sigma_rule: The parsed Sigma rule object
+        query: The converted query string
+        query_type: The Kibana rule type ("eql" or "query")
+        query_language: The query language ("eql" or "lucene")
+        file_path: Path to the Sigma rule file
+    """
     # Get rule metadata
     title = sigma_rule.title if hasattr(sigma_rule, 'title') else "Unnamed Rule"
     description = sigma_rule.description if hasattr(sigma_rule, 'description') else ""
     level = str(sigma_rule.level).lower() if hasattr(sigma_rule, 'level') else "medium"
     author = sigma_rule.author if hasattr(sigma_rule, 'author') else ["coreSigma"]
     
-    # Create unique rule ID from file path
-    rule_id = f"coresigma-{file_path.stem.replace(' ', '-').lower()}"
+    # Determine if this is a UL or ESF rule based on file path
+    # Check if the directory name is "ul" (not just contains "ul")
+    is_ul_rule = file_path.parent.name.lower() == "ul"
     
-    # Get tags
-    tags = ["macos", "sigma", "esf"]
+    # Create unique rule ID from file path (include ul- prefix for UL rules)
+    rule_prefix = "coresigma-ul-" if is_ul_rule else "coresigma-"
+    rule_id = f"{rule_prefix}{file_path.stem.replace(' ', '-').lower()}"
+    
+    # Get tags and index pattern based on rule type
+    if is_ul_rule:
+        tags = ["macos", "sigma", "unified-logging"]
+        index_pattern = ES_INDEX_UL
+    else:
+        tags = ["macos", "sigma", "esf"]
+        index_pattern = ES_INDEX_ESF
+    
     if hasattr(sigma_rule, 'tags'):
         for tag in sigma_rule.tags:
             tag_str = str(tag)
@@ -196,10 +322,10 @@ def create_detection_rule(sigma_rule, lucene_query: str, file_path: Path) -> dic
         "enabled": False,  # Start disabled for safety
         "risk_score": RISK_SCORE_MAP.get(level, 50),
         "severity": SEVERITY_MAP.get(level, "medium"),
-        "type": "query",
-        "query": lucene_query,
-        "language": "lucene",
-        "index": [ES_INDEX_PATTERN],
+        "type": query_type,
+        "query": query,
+        "language": query_language,
+        "index": [index_pattern],
         "from": "now-6m",
         "to": "now",
         "interval": "5m",
@@ -241,16 +367,19 @@ def deploy_rule(rule_payload: dict, dry_run: bool = False) -> tuple:
     if resp.status_code == 200:
         # Rule exists, update it
         existing = resp.json()
-        rule_payload["id"] = existing.get("id")
+        # For updates, use 'id' only, remove 'rule_id' to avoid conflict
+        update_payload = rule_payload.copy()
+        update_payload["id"] = existing.get("id")
+        update_payload.pop("rule_id", None)  # Remove rule_id for updates
         resp = requests.put(
             f"{KIBANA_URL}/api/detection_engine/rules",
             headers=HEADERS,
-            json=rule_payload,
+            json=update_payload,
             auth=ES_AUTH
         )
         action = "updated"
     else:
-        # Create new rule
+        # Create new rule - use rule_id only
         resp = requests.post(
             f"{KIBANA_URL}/api/detection_engine/rules",
             headers=HEADERS,
@@ -293,7 +422,7 @@ def enable_rules(rule_ids: list) -> int:
 
 
 def main():
-    global KIBANA_URL
+    global KIBANA_URL, ES_AUTH
     
     parser = argparse.ArgumentParser(description="Deploy Sigma rules to Kibana Detection Engine")
     parser.add_argument("--dry-run", action="store_true", help="Don't actually deploy, just show what would happen")
@@ -304,6 +433,13 @@ def main():
     
     if args.kibana_url:
         KIBANA_URL = args.kibana_url
+    
+    # Load authentication
+    try:
+        ES_AUTH = get_auth()
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
     
     print("=" * 60)
     print("coreSigma - Sigma Rule Deployment")
@@ -352,18 +488,24 @@ def main():
         title = sigma_rule.title if hasattr(sigma_rule, 'title') else file_path.stem
         print(f"\n  [{title}]")
         
-        # Convert to Lucene
+        # Determine if this is a UL rule based on file path
+        # Check if the directory name is "ul" (not just contains "ul")
+        is_ul_rule = file_path.parent.name.lower() == "ul"
+        
+        # Convert to query language
+        # - ESF rules: EQL with ECS field mapping (for structured queries)
+        # - UL rules: Lucene (supports text field queries on 'message')
         yaml_content = rule_info["content"]
-        lucene_query = convert_sigma_to_lucene(sigma_rule, yaml_content)
-        if not lucene_query:
-            print("    SKIP: Could not convert to Lucene query")
+        query, query_type, query_language = convert_sigma_rule(sigma_rule, yaml_content, is_ul_rule=is_ul_rule)
+        if not query:
+            print(f"    SKIP: Could not convert to {query_language or 'query'}")
             failed_count += 1
             continue
         
-        print(f"    Query: {lucene_query[:80]}...")
+        print(f"    [{query_language.upper()}]: {query[:80]}...")
         
         # Create detection rule payload
-        rule_payload = create_detection_rule(sigma_rule, lucene_query, file_path)
+        rule_payload = create_detection_rule(sigma_rule, query, query_type, query_language, file_path)
         
         # Deploy
         success, message = deploy_rule(rule_payload, args.dry_run)

@@ -8,8 +8,6 @@ that will be captured and should trigger detection rules.
 import os
 import subprocess
 import time
-import tempfile
-import shutil
 
 def run_cmd(cmd, description, shell=True):
     """Run a command and print status."""
@@ -50,7 +48,7 @@ def main():
         os.remove(test_plist)
         print(f"  → Removed {test_plist}")
     except PermissionError:
-        print(f"  → (Permission denied for LaunchAgents)")
+        print("  → (Permission denied for LaunchAgents)")
     
     # 3. Curl/wget downloads
     print("\n[3] Network Download Tools")

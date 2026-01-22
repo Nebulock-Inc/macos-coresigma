@@ -111,30 +111,49 @@ GET macos-telemetry-esf-*/_search
 
 ## Create Visualizations
 
-### Event Type Breakdown
+Pre-built dashboards are available at: http://localhost:5601/app/dashboards
+
+To create custom visualizations:
+
+### Event Collection Timeline (Line Graph)
 
 1. Go to **Visualize Library** → **Create visualization**
-2. Choose **Aggregation-based visualization**
-3. Select your index pattern
-4. Metric: **Count**
-5. Buckets: **Terms** on `event_name.keyword`
-6. Save and view
+2. Select **Lens** (recommended for Kibana 8.x)
+3. Choose data view: **macos-telemetry-esf-***
+4. Configure:
+   - **X-axis**: `@timestamp` (Date Histogram)
+   - **Y-axis**: Count
+   - **Chart type**: Line
+5. Save as: "macOS Event Collection Timeline"
 
-### Process Execution Timeline
+### Event Types Distribution (Pie Chart)
 
-1. Create new visualization
-2. Choose **Vertical Bar Chart**
-3. Y-axis: **Count**
-4. X-axis: **Date Histogram** on `@timestamp`
-5. Add filter: `event_name: exec`
-6. Save
+1. Create new visualization → **Lens**
+2. Data view: **macos-telemetry-esf-***
+3. Configure:
+   - **Primary metric**: Count
+   - **Breakdown by**: `event.action` (Terms)
+   - **Chart type**: Pie
+4. Save as: "macOS Event Types Distribution"
+
+### Top Processes (Horizontal Bar Chart)
+
+1. Create new visualization → **Lens**
+2. Data view: **macos-telemetry-esf-***
+3. Configure:
+   - **X-axis**: `process.executable.keyword` (Terms, Top 10)
+   - **Y-axis**: Count
+   - **Chart type**: Horizontal Bar
+4. Save as: "macOS Top Processes"
 
 ## Create Dashboards
 
 1. Go to **Dashboards** → **Create dashboard**
-2. Add visualizations you created
-3. Add saved searches
-4. Save dashboard
+2. Click **Add** → **Add panels**
+3. Add visualizations you created
+4. Add saved searches as panels
+5. Arrange and resize panels
+6. Save dashboard
 
 ## Useful Fields for Filtering
 

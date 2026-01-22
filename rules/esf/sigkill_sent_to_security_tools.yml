@@ -20,16 +20,16 @@ detection:
     event.action: signal
     SignalNumber: 9
     TargetImage|endswith:
-    - /LittleSnitch
-    - /BlockBlock
-    - /KnockKnock
-    - /OverSight
-    - /ReiKey
-    - /Santa
-    - /xprotectd
-    - /MRT
-    - /CrowdStrike
-    - /SentinelOne
+    - LittleSnitch
+    - BlockBlock
+    - KnockKnock
+    - OverSight
+    - ReiKey
+    - Santa
+    - xprotectd
+    - MRT
+    - CrowdStrike
+    - SentinelOne
   condition: selection
 falsepositives:
 - System updates

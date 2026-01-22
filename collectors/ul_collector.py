@@ -16,16 +16,52 @@ class ULCollector:
     """Collects and normalizes Unified Logging events for Sigma pipeline"""
     
     # Security-critical subsystems for filtering
+    # Ordered by security priority
     SECURITY_SUBSYSTEMS = [
+        # Critical - Keep all events (privilege escalation, privacy)
         "com.apple.TCC",
         "com.apple.sudo",
         "com.apple.gatekeeper",
         "com.apple.syspolicy",
         "com.apple.securityd",
+        
+        # High - Authentication and authorization
         "com.apple.alf",
         "com.apple.opendirectoryd",
         "com.apple.authorization",
+        "com.apple.authd",
+        
+        # Additional security-relevant subsystems
+        "com.apple.ManagedClient",    # MDM/enterprise policies
+        "com.apple.launchd",          # Persistence mechanisms
+        "com.apple.xpc",              # IPC security
     ]
+    
+    # Subsystems that don't need message filtering (always keep all)
+    CRITICAL_SUBSYSTEMS = {
+        "com.apple.TCC",
+        "com.apple.sudo", 
+        "com.apple.gatekeeper",
+        "com.apple.syspolicy",
+    }
+    
+    # Keywords indicating high-value security events (always keep)
+    SIGNAL_KEYWORDS = [
+        "denied", "failed", "rejected", "blocked", "invalid",
+        "violation", "unauthorized", "suspicious", "malware",
+        "quarantine", "xprotect", "codesign", "notarization",
+        "COMMAND=", "TTY=", "USER=root", "authentication",
+        "kextload", "profile", "policy",
+    ]
+    
+    # Keywords indicating routine/noise events (filter from non-critical subsystems)
+    NOISE_KEYWORDS = [
+        "succeeded", "allowed", "completed successfully",
+        "query completed", "check passed", "request completed",
+    ]
+    
+    # Enable filtering by default (set to False for full capture)
+    ENABLE_FILTERING = True
     
     def __init__(self, output: str = "stdout", es_url: Optional[str] = None):
         """
@@ -42,17 +78,26 @@ class ULCollector:
         
         if output == "elasticsearch":
             try:
-                from elasticsearch import Elasticsearch
+                # Try relative import first (when used as a module)
+            try:
+                    from .auth import create_elasticsearch_client, AuthenticationError
+                except ImportError:
+                    # Fall back to direct import (when run as a script)
+                    from auth import create_elasticsearch_client, AuthenticationError
+                
                 es_url_final = es_url if es_url else 'http://localhost:9200'
-                self.es_client = Elasticsearch([es_url_final])
-                # Test connection
                 try:
+                    self.es_client = create_elasticsearch_client(es_url_final)
                     info = self.es_client.info()
                     print(f"✅ Connected to Elasticsearch: {es_url_final} (cluster: {info.get('cluster_name', 'unknown')})", file=sys.stderr)
+                except AuthenticationError as e:
+                    print(f"❌ Authentication error: {e}", file=sys.stderr)
+                    self.es_client = None
                 except Exception as e:
-                    print(f"⚠️  Elasticsearch connection test failed: {e}", file=sys.stderr)
-            except ImportError:
-                print("❌ ERROR: elasticsearch module not found. Install with: pip install elasticsearch", file=sys.stderr)
+                    print(f"⚠️  Elasticsearch connection failed: {e}", file=sys.stderr)
+                    self.es_client = None
+            except ImportError as e:
+                print(f"❌ ERROR: {e}", file=sys.stderr)
                 self.es_client = None
         
         # Setup signal handlers
@@ -125,11 +170,6 @@ class ULCollector:
             # Convert Unix timestamp to ISO format
             timestamp = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
         
-        normalized = {
-            "@timestamp": timestamp,
-            "sourcetype": "macos:ul",
-        }
-        
         # Extract subsystem and category (at top level in log stream output)
         subsystem = ul_event.get("subsystem", "")
         category = ul_event.get("category", "")
@@ -141,40 +181,96 @@ class ULCollector:
         if not message:
             message = ul_event.get("message", "")
         
-        normalized["subsystem"] = subsystem
-        normalized["category"] = category
-        normalized["message"] = message
-        normalized["CommandLine"] = message  # Map message to CommandLine for Sigma compatibility
+        # Build ECS-compliant normalized event
+        normalized = {
+            # Core ECS fields
+            "@timestamp": timestamp,
+            "event.kind": "event",
+            "event.module": "macos",
+            "event.dataset": "macos.ul",
+            "event.category": category,
+            
+            # Data stream fields
+            "data_stream.type": "logs",
+            "data_stream.dataset": "macos.ul",
+            "data_stream.namespace": "default",
+            
+            # Host info
+            "host.os.family": "darwin",
+            "host.os.type": "macos",
+            
+            # Legacy compatibility
+            "sourcetype": "macos:ul",
+            
+            # UL-specific fields mapped to ECS
+            "log.logger": subsystem,           # ECS: log.logger for subsystem
+            "message": message,                 # ECS: message
+            
+            # Also keep native UL fields for backward compatibility
+            "ul.subsystem": subsystem,
+            "ul.category": category,
+            "subsystem": subsystem,             # Legacy
+            "category": category,               # Legacy
+        }
         
         # Extract process information
-        process_name = ul_event.get("processImagePath", "")
-        if not process_name:
-            process_name = ul_event.get("process", "")
+        # Handle both string and object formats for 'process' field
+        process_path = ul_event.get("processImagePath", "")
+        process_field = ul_event.get("process", "")
+        
+        # If process is an object (dict), extract the executable path
+        if isinstance(process_field, dict):
+            if not process_path:
+                process_path = process_field.get("executable", "") or process_field.get("path", "")
+        elif isinstance(process_field, str) and not process_path:
+            process_path = process_field
+        
         pid = ul_event.get("processID")
         if not pid:
             pid = ul_event.get("pid")
         
-        normalized["ProcessName"] = process_name
+        # ECS process fields
+        import os
+        if process_path and isinstance(process_path, str):
+            normalized["process.executable"] = process_path
+            normalized["process.name"] = os.path.basename(process_path)
+        if pid is not None:
+            normalized["process.pid"] = pid
+        
+        # Legacy compatibility - only use string values
+        if isinstance(process_path, str):
+            normalized["ProcessName"] = process_path
         normalized["ProcessId"] = pid
-        normalized["process"] = process_name
         
         # Extract user if present
         user_id = ul_event.get("userID")
         if user_id is not None:
-            normalized["UserId"] = user_id
+            normalized["user.id"] = str(user_id)
+            normalized["UserId"] = user_id  # Legacy
         
         # Extract user from message if present
         user = self._extract_user(message)
         if user:
-            normalized["User"] = user
+            normalized["user.name"] = user
+            normalized["User"] = user  # Legacy
         
-        # Extract network information if present
+        # Extract network information if present (maps to ECS destination.*/source.*)
         network_info = self._extract_network_info(message)
         if network_info:
-            normalized.update(network_info)
+            # Map to ECS fields
+            if "DestinationIp" in network_info:
+                normalized["destination.ip"] = network_info["DestinationIp"]
+            if "DestinationPort" in network_info:
+                normalized["destination.port"] = network_info["DestinationPort"]
+            if "SourceIp" in network_info:
+                normalized["source.ip"] = network_info["SourceIp"]
+            if "SourcePort" in network_info:
+                normalized["source.port"] = network_info["SourcePort"]
         
-        # Set hostname
-        normalized["host.name"] = ul_event.get("hostname", "") or ul_event.get("host", "")
+        # Set hostname (ECS: host.name)
+        hostname = ul_event.get("hostname", "") or ul_event.get("host", "")
+        if hostname:
+            normalized["host.name"] = hostname
         
         return normalized
     
@@ -194,6 +290,38 @@ class ULCollector:
                 return match.group(1)
         
         return None
+    
+    def should_keep_event(self, ul_event: Dict[str, Any]) -> bool:
+        """
+        Filter UL events to reduce noise while preserving security signal.
+        
+        Args:
+            ul_event: Raw UL event from log stream
+            
+        Returns:
+            True if event should be kept, False to filter
+        """
+        if not self.ENABLE_FILTERING:
+            return True
+        
+        subsystem = ul_event.get("subsystem", "")
+        message = ul_event.get("eventMessage", "") or ul_event.get("formatString", "") or ""
+        message_lower = message.lower()
+        
+        # Always keep events from critical subsystems
+        if subsystem in self.CRITICAL_SUBSYSTEMS:
+            return True
+        
+        # Always keep events with security signal keywords
+        if any(kw.lower() in message_lower for kw in self.SIGNAL_KEYWORDS):
+            return True
+        
+        # Filter routine/noise events from non-critical subsystems
+        if any(kw.lower() in message_lower for kw in self.NOISE_KEYWORDS):
+            return False
+        
+        # Default: keep the event
+        return True
     
     def _extract_network_info(self, message: str) -> Optional[Dict[str, Any]]:
         """Extract network IP addresses and ports from message"""
@@ -382,6 +510,10 @@ class ULCollector:
                                         if isinstance(raw_event, dict):
                                             # Validate it's actually an event object (has expected fields)
                                             if 'eventType' in raw_event or 'subsystem' in raw_event:
+                                                # Apply filtering
+                                                if not self.should_keep_event(raw_event):
+                                                    continue
+                                                
                                                 normalized = self.normalize_event(raw_event)
                                                 event_count += 1
                                                 
@@ -455,11 +587,22 @@ def main():
                        default="stdout", help="Output destination")
     parser.add_argument("--es-url", default="http://localhost:9200",
                        help="Elasticsearch URL (for elasticsearch output)")
+    parser.add_argument("--no-filtering", action="store_true",
+                       help="Disable noise filtering (capture all events)")
+    parser.add_argument("--no-recent", action="store_true",
+                       help="Skip capturing recent events on startup")
     
     args = parser.parse_args()
     
     collector = ULCollector(output=args.output, es_url=args.es_url)
-    collector.collect()
+    
+    if args.no_filtering:
+        collector.ENABLE_FILTERING = False
+        print("Filtering DISABLED - capturing all events", file=sys.stderr)
+    else:
+        print("Filtering ENABLED - reducing noise", file=sys.stderr)
+    
+    collector.collect(capture_recent=not args.no_recent)
 
 if __name__ == "__main__":
     main()

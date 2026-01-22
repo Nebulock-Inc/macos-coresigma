@@ -37,14 +37,24 @@ if ! command -v sigma &> /dev/null; then
 fi
 
 # Setup Elasticsearch templates (if Elasticsearch is running)
-if curl -s http://localhost:9200 > /dev/null 2>&1; then
+ES_URL="${ES_URL:-http://localhost:9200}"
+ES_USER="${ES_USER:-}"
+ES_PASSWORD="${ES_PASSWORD:-}"
+
+if [ -n "$ES_USER" ] && [ -n "$ES_PASSWORD" ]; then
+    CURL_AUTH="-u ${ES_USER}:${ES_PASSWORD}"
+else
+    CURL_AUTH=""
+fi
+
+if curl -s $CURL_AUTH "$ES_URL" > /dev/null 2>&1; then
     echo ""
     echo "Setting up Elasticsearch index templates..."
-    bash scripts/setup_elasticsearch_templates.sh
+    ES_USER="$ES_USER" ES_PASSWORD="$ES_PASSWORD" bash scripts/setup_elasticsearch_templates.sh
 else
     echo ""
-    echo "⚠️  Elasticsearch not running - skipping template setup"
-    echo "   Run 'bash scripts/setup_elasticsearch_templates.sh' after starting Elasticsearch"
+    echo "⚠️  Elasticsearch not running or credentials incorrect - skipping template setup"
+    echo "   Run 'ES_USER=elastic ES_PASSWORD=changeme bash scripts/setup_elasticsearch_templates.sh' after starting Elasticsearch"
 fi
 
 echo ""

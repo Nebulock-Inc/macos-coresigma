@@ -27,7 +27,7 @@ detection:
     - /mount
     - /mount_smbfs
     - /mount_afp
-    - /mount_nfs
+    - mount_nfs
   condition: selection_event and selection_process
 falsepositives:
 - Legitimate network share access for file sharing

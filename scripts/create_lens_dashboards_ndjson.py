@@ -501,7 +501,7 @@ def main():
     else:
         # Use process.parent.executable.keyword - collector now populates this
         parent_field = "process.parent.executable.keyword"
-        print(f"  ℹ️ Parent field not yet in index (restart collector and generate events)")
+        print("  ℹ️ Parent field not yet in index (restart collector and generate events)")
     print(f"  Parent process field: {parent_field}")
     print(f"  Available keyword fields: {len(keyword_fields)}")
     

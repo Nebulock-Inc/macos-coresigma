@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 """Reset Elasticsearch indices and verify."""
 import requests
-import json
-import subprocess
-import time
-import os
 
 ES_URL = "http://localhost:9200"
 ES_USER = "elastic"

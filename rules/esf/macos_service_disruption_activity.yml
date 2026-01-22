@@ -31,8 +31,8 @@ detection:
     - stop
   selection_kill:
     Image|endswith:
-    - /killall
-    - /pkill
+    - killall
+    - pkill
     CommandLine|contains:
     - '-9'
     - SIGKILL

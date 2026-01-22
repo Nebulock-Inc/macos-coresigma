@@ -13,10 +13,10 @@ detection:
     selection:
         esf.event_type: 9
         event.action: exec
-        Image|re:
-            - '.*/tmp/.*'
-            - '.*/var/tmp/.*'
-            - '.*/dev/shm/.*'
+        Image|contains:
+            - '/tmp/'
+            - '/var/tmp/'
+            - '/dev/shm/'
         CommandLine|contains:
             - 'curl'
             - 'wget'

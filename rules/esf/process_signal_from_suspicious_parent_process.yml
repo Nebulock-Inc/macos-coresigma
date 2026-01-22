@@ -22,10 +22,10 @@ detection:
     Image|endswith:
     - /curl
     - /wget
-    - /python
-    - /ruby
-    - /perl
-    - /osascript
+    - python
+    - ruby
+    - perl
+    - osascript
   condition: selection_signal and selection_suspicious
 falsepositives:
 - Scripts and automation tools

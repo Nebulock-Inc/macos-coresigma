@@ -1,0 +1,86 @@
+# Dashboard Protection Rules for macos-coresigma
+
+## CRITICAL: Dashboard Management Rules
+
+### NEVER DELETE DASHBOARDS
+- **NEVER** delete any Kibana dashboards without explicit user confirmation
+- **NEVER** use `requests.delete()` on dashboard endpoints unless specifically instructed
+- Always preserve existing dashboards when creating new ones
+- If a dashboard needs to be updated, update it in place rather than delete and recreate
+- When creating visualizations, use unique IDs to avoid overwriting existing ones
+
+### AUTOMATIC BACKUP REQUIREMENT
+BEFORE making ANY changes to dashboards or visualizations:
+1. Export all existing dashboards to `exports/backups/` with timestamp
+2. Keep `exports/all_dashboards_latest.ndjson` updated as the most recent backup
+3. Use the following backup command pattern:
+
+```python
+from datetime import datetime
+import requests
+
+KIBANA_URL = "http://localhost:5601"
+AUTH = ("elastic", "changeme")
+HEADERS = {"kbn-xsrf": "true", "Content-Type": "application/json"}
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# Get all dashboards
+resp = requests.get(f"{KIBANA_URL}/api/saved_objects/_find?type=dashboard&per_page=100", headers=HEADERS, auth=AUTH)
+dashboards = resp.json().get("saved_objects", [])
+all_ids = [{"type": "dashboard", "id": d["id"]} for d in dashboards]
+
+# Export with dependencies
+resp = requests.post(
+    f"{KIBANA_URL}/api/saved_objects/_export",
+    headers=HEADERS, auth=AUTH,
+    json={"objects": all_ids, "includeReferencesDeep": True}
+)
+
+# Save backups
+with open(f"exports/backups/all_dashboards_{timestamp}.ndjson", "w") as f:
+    f.write(resp.text)
+with open("exports/all_dashboards_latest.ndjson", "w") as f:
+    f.write(resp.text)
+```
+
+### Current Dashboard IDs (DO NOT DELETE WITHOUT EXPLICIT USER PERMISSION)
+- `macos-security-dashboard` - macOS Security Dashboard (ESF) with 20 visualizations
+- `macos-ul-dashboard` - macOS Unified Logging Overview with 5 visualizations
+- `sigma-rules-dashboard` - Sigma Rule Triggers Overview with 5 visualizations
+- `detection-rules-monitoring` - Detection Rules Monitoring with 5 visualizations
+
+### Associated Visualization IDs (DO NOT DELETE)
+ESF Visualizations:
+- vis-total-events, vis-event-types, vis-users, vis-event-timeline, vis-event-bar
+- vis-executables, vis-process-by-user, vis-command-lines, vis-security-events
+- vis-event-summary, vis-file-operations, vis-event-category, vis-event-action
+- vis-groups, vis-events-over-time-action, vis-top-process-names, vis-top-parent-names
+- vis-top-process-exe, vis-top-parent-exe, vis-top-parent-child
+- vis-least-process-names, vis-least-parent-names, vis-least-process-exe
+- vis-least-parent-exe, vis-least-commands, vis-least-parent-child
+
+UL Visualizations:
+- vis-ul-total, vis-ul-subsystem, vis-ul-process, vis-ul-timeline, vis-ul-security
+
+Rules Visualizations:
+- vis-rules-total, vis-rules-severity, vis-rules-name, vis-rules-timeline, vis-rules-table
+
+### Backup Location
+- Primary backups: `exports/backups/`
+- Latest combined backup: `exports/all_dashboards_latest.ndjson`
+- Working ESF backup: `exports/backups/macos_security_dashboard_working.ndjson`
+
+### Restoration Command
+If dashboards are accidentally deleted:
+```bash
+curl -X POST "http://localhost:5601/api/saved_objects/_import?overwrite=true" \
+  -H "kbn-xsrf: true" \
+  -u elastic:changeme \
+  -F file=@exports/all_dashboards_latest.ndjson
+```
+
+### Important Notes
+- Use legacy aggregation-based visualizations (metric, pie, histogram, table), NOT Lens
+- Lens visualizations have strict API requirements and often fail programmatically
+- Always test visualizations in the Kibana UI before committing changes
+- Dashboard IDs are stable; visualization IDs should use the vis- prefix pattern

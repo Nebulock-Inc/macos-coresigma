@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Export current dashboards from Kibana to see user changes."""
 
-import json
 import os
 import requests
-from datetime import datetime
 
 KIBANA_URL = os.environ.get("KIBANA_URL", "http://localhost:5601")
 ES_USER = os.environ.get("ES_USER", "elastic")

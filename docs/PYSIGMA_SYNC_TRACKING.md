@@ -6,6 +6,53 @@ This document tracks changes made in macos-coresigma that need to be synced to:
 
 ## Pending Changes
 
+### 2026-01-22: ESF Collector Field Gaps Analysis
+
+**Issue**: Some ECS fields that the pySigma pipeline maps to are not being populated by the ESF collector.
+
+**Analysis of Disabled Rules**:
+
+| Rule | Sigma Field | ECS Field (pySigma mapping) | Collector Status | Action |
+|------|-------------|----------------------------|------------------|--------|
+| mass_process_termination | `SignalNumber` | `signal.number` | ✅ Outputs correctly | No signal events in test data |
+| sigkill_sent_to_security_tools | `SignalNumber`, `TargetImage` | `signal.number`, `target.process.executable` | ✅ Outputs correctly | No signal events in test data |
+| macos_esf_suspicious_w_x_memory_mapping | ~~`mprotect.prot`~~ `MemoryProtection` | `memory.protection` | ✅ Outputs correctly | **Rule FIXED** - was using ECS field instead of Sigma taxonomy |
+| macos_setuid_setgid_privilege_escalation | `TargetUserId`, `UserId` | `user.target.id`, `process.user.id` | ✅ Outputs correctly | No setuid events in test data |
+| process_execution_suspicious | `Image\|re:` | `process.executable` | ✅ N/A | **Rule FIXED** - changed regex to contains modifier |
+
+**Conclusion**: The ESF collector already outputs all required ECS fields correctly. The disabled rules were either:
+1. Using incorrect Sigma field names (fixed)
+2. Using regex modifiers that EQL doesn't handle well (fixed)
+3. Requiring test data that doesn't exist yet (signal, setuid events)
+
+**Files Updated**:
+- [x] `macos-coresigma/rules/esf/macos_esf_suspicious_w_x_memory_mapping.yml` - Changed `mprotect.prot` to `MemoryProtection`
+- [x] `macos-coresigma/rules/esf/process_execution_suspicious.yml` - Changed `Image|re:` to `Image|contains:`
+
+---
+
+### 2026-01-22: UL Rules Backend Strategy
+
+**Issue**: EQL cannot query text fields (like `message`) which are essential for UL rules.
+
+**Solution**: Use Lucene backend for UL rules instead of EQL:
+- **ESF rules**: EQL backend with `ecs_macos_esf()` pipeline (supports structured field queries)
+- **UL rules**: Lucene backend with simple field mapping (supports text field queries on `message`)
+
+**UL Field Mapping** (implemented in `deploy_sigma_rules.py`):
+| Sigma Field | UL Collector Field |
+|-------------|-------------------|
+| `subsystem` | `ul.subsystem` |
+| `category` | `ul.category` |
+| `message` | `message` (text field - no mapping needed) |
+
+**Future PR Consideration**: The `ecs_macos_ul()` pipeline could be submitted to pySigma-backend-elasticsearch as a companion to `ecs_macos_esf()`.
+
+**Files Updated**:
+- [x] `macos-coresigma/scripts/deploy_sigma_rules.py` - Added UL pipeline and Lucene backend support
+
+---
+
 ### 2026-01-21: Parent Process Fields Now Populated
 
 **Issue**: The ESF collector was not correctly populating parent process fields for EXEC and FORK events.

@@ -14,7 +14,7 @@ detection:
     esf.event_type: 20
     event.action: mprotect
   selection_flags:
-    mprotect.prot|contains:
+    MemoryProtection|contains:
     - wx
     - xw
   condition: selection_evt and selection_flags
