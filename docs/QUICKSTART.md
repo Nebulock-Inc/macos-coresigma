@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get started with macOS Sigma Pipelines in 5 minutes.
+Get started with macOS CoreSigma in 5 minutes.
 
 ## Prerequisites Check
 
@@ -13,85 +13,106 @@ sudo eslogger --version  # macOS 11.0+ required
 
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/macos-sigma-pipelines-new.git
-cd macos-sigma-pipelines-new
+git clone https://github.com/Nebulock-Inc/macos-coresigma.git
+cd macos-coresigma
 ./setup.sh
 source venv/bin/activate
 ```
 
-## Test the Pipeline
+## Start Elasticsearch
 
 ```bash
-# Test rule conversion
-./scripts/test_pipeline.sh
+# Using Docker Compose
+docker-compose up -d
 
-# Run end-to-end tests (requires Elasticsearch)
-python3 tests/test_e2e.py
+# Wait for services
+./scripts/start_services.sh
+```
+
+## Configure Credentials
+
+Choose one method (Keychain recommended for local development):
+
+```bash
+# Option 1: Store in macOS Keychain (recommended)
+./scripts/setup_credentials.sh
+
+# Option 2: Create API key (recommended for production)
+./scripts/setup_credentials.sh --api-key
+
+# Test authentication
+./scripts/setup_credentials.sh --test
+```
+
+## Set Up Index Templates
+
+```bash
+./scripts/setup_elasticsearch_templates.sh
 ```
 
 ## Collect Events
 
-**ESF Events:**
+**ESF Events (requires sudo):**
 ```bash
-sudo python3 collectors/esf_collector.py --output stdout
+sudo python3 collectors/esf_collector.py --output elasticsearch
 ```
 
 **UL Events:**
 ```bash
-python3 collectors/ul_collector.py --output stdout
+python3 collectors/ul_collector.py --output elasticsearch
 ```
 
-## Convert a Rule
+## Deploy Detection Rules
 
 ```bash
-# Convert ESF rule to Elasticsearch Lucene
-sigma convert -t lucene \
-  -p pipelines/macos_esf.yml \
-  rules/esf/process_execution_suspicious.yml
-
-# Convert UL rule to Elasticsearch EQL
-sigma convert -t eql \
-  -p pipelines/macos_ul.yml \
-  rules/ul/tcc_unusual_access.yml
+python3 scripts/deploy_sigma_rules.py
 ```
 
-## Example Workflow
+## Create Dashboards
 
-1. **Start Elasticsearch** (Docker):
-   ```bash
-   docker run -d -p 9200:9200 -e "discovery.type=single-node" -e "xpack.security.enabled=false" docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-   ```
+```bash
+python3 scripts/create_lens_dashboards_ndjson.py
+```
 
-2. **Collect Events**:
-   ```bash
-   sudo python3 collectors/esf_collector.py \
-     --output elasticsearch \
-     --es-url http://localhost:9200
-   ```
+## Access Kibana
 
-3. **Convert Rule**:
-   ```bash
-   sigma convert -t lucene \
-     -p pipelines/macos_esf.yml \
-     rules/esf/process_execution_suspicious.yml \
-     > query.lucene
-   ```
+Open http://localhost:5601 in your browser.
 
-4. **Query Elasticsearch**:
-   ```bash
-   curl -X GET "localhost:9200/macos-telemetry-esf-*/_search?q=$(cat query.lucene)&pretty"
-   ```
+- **Username**: elastic
+- **Password**: changeme (or your configured password)
 
-## Key Files
+Navigate to:
+- **Security > Alerts** - View triggered detection rules
+- **Analytics > Dashboards** - Security dashboards
 
-- **Pipelines**: `pipelines/macos_esf.yml`, `pipelines/macos_ul.yml`
-- **Collectors**: `collectors/esf_collector.py`, `collectors/ul_collector.py`
-- **Rules**: `rules/esf/`, `rules/ul/`
-- **Tests**: `tests/test_e2e.py`
+## Convert a Rule Manually
+
+```bash
+# Convert ESF rule to Elasticsearch EQL
+sigma convert -t elasticsearch -f eql \
+  -p ecs_macos_esf \
+  rules/esf/process_execution_suspicious.yml
+
+# Convert UL rule to Lucene
+sigma convert -t elasticsearch \
+  -p ecs_macos_ul \
+  rules/ul/tcc_bypass_attempt.yml
+```
+
+## Key Directories
+
+| Directory | Contents |
+|-----------|----------|
+| `collectors/` | ESF and UL data collectors |
+| `rules/esf/` | 38 ESF-based Sigma rules |
+| `rules/ul/` | 19 UL-based Sigma rules |
+| `scripts/` | Setup and utility scripts |
+| `exports/` | Kibana dashboard exports |
+| `docs/` | Documentation |
 
 ## Next Steps
 
 - Read [INSTALLATION.md](INSTALLATION.md) for detailed setup
-- Review [BLOG_POST.md](BLOG_POST.md) for project overview
-- Check sample rules in `rules/` directory
-
+- Review [FILTERING_CONFIGURATION.md](FILTERING_CONFIGURATION.md) for tuning
+- Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if you encounter issues
+- Explore rules in `rules/esf/` and `rules/ul/`

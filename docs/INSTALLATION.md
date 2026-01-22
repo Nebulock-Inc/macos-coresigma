@@ -1,6 +1,6 @@
 # Installation and Configuration Guide
 
-This guide provides step-by-step instructions for installing and configuring the macOS Sigma Pipelines for ESF and Unified Logging.
+Complete guide for installing and configuring macOS CoreSigma.
 
 ## Prerequisites
 
@@ -11,109 +11,177 @@ Before installing, ensure you have:
 3. **Administrator/root access** - Required for ESF event collection
 4. **Xcode Command Line Tools** - Install with `xcode-select --install`
 
-### Optional (for Elasticsearch testing):
-5. **Elasticsearch 8.0+** - Can be run via Docker
-6. **Docker Desktop** - For easy Elasticsearch deployment
+### Optional (for Elasticsearch):
+5. **Docker Desktop** - For easy Elasticsearch/Kibana deployment
+6. **Elasticsearch 8.x** - Can be run via Docker or installed locally
 
 ## Installation Steps
 
 ### Step 1: Clone the Repository
 
 ```bash
-cd ~
-git clone https://github.com/yourusername/macos-sigma-pipelines-new.git
-cd macos-sigma-pipelines-new
+git clone https://github.com/Nebulock-Inc/macos-coresigma.git
+cd macos-coresigma
 ```
 
-### Step 2: Install Python Dependencies
+### Step 2: Run Setup Script
 
 ```bash
-# Create virtual environment (recommended)
-python3 -m venv venv
+./setup.sh
 source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
 ```
 
-### Step 3: Install Sigma CLI Tools
+This will:
+- Create a Python virtual environment
+- Install all dependencies
+- Verify prerequisites
 
-The Sigma CLI (`sigmatools`) is required for rule conversion:
+### Step 3: Start Elasticsearch and Kibana
 
-```bash
-pip install sigmatools
-```
-
-Verify installation:
-```bash
-sigma --version
-```
-
-### Step 4: Set Up Elasticsearch (Optional)
-
-If you want to test the end-to-end pipeline with Elasticsearch:
-
-#### Option A: Using Docker Compose (Recommended)
+#### Option A: Docker Compose (Recommended)
 
 ```bash
 docker-compose up -d
 ```
 
-This starts both Elasticsearch and Kibana. Wait for services to start:
+Wait for services to be ready:
 ```bash
-curl http://localhost:9200
+./scripts/start_services.sh
 ```
 
-#### Option B: Using Docker (Manual)
+#### Option B: Manual Docker
 
 ```bash
-docker run -d \
-  --name elasticsearch \
-  -p 9200:9200 \
-  -p 9300:9300 \
+# Elasticsearch
+docker run -d --name elasticsearch \
+  -p 9200:9200 -p 9300:9300 \
   -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
+  -e "xpack.security.enabled=true" \
+  -e "ELASTIC_PASSWORD=changeme" \
   docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+
+# Kibana
+docker run -d --name kibana \
+  -p 5601:5601 \
+  -e "ELASTICSEARCH_HOSTS=http://elasticsearch:9200" \
+  -e "ELASTICSEARCH_USERNAME=kibana_system" \
+  -e "ELASTICSEARCH_PASSWORD=changeme" \
+  --link elasticsearch \
+  docker.elastic.co/kibana/kibana:8.11.0
 ```
 
-Wait for Elasticsearch to start:
+### Step 4: Configure Authentication
+
+CoreSigma supports multiple authentication methods. Choose one:
+
+#### Option A: macOS Keychain (Recommended for Development)
+
 ```bash
-curl http://localhost:9200
+./scripts/setup_credentials.sh
+# Enter your Elasticsearch password when prompted
 ```
 
-#### Option C: Local Installation
+This stores credentials securely in macOS Keychain. No environment variables needed.
 
-Follow the [Elasticsearch installation guide](https://www.elastic.co/guide/en/elasticsearch/reference/current/install-elasticsearch.html).
-
-### Step 4.5: Configure Elasticsearch Index Templates
-
-**Important**: Index templates ensure `@timestamp` is correctly mapped as a date field for Kibana compatibility.
+#### Option B: API Key (Recommended for Production)
 
 ```bash
-bash scripts/setup_elasticsearch_templates.sh
+./scripts/setup_credentials.sh --api-key
 ```
 
-This creates templates for:
+This creates a limited-scope API key and optionally stores it in `~/.coresigma/config.yml`.
+
+#### Option C: Environment Variables
+
+```bash
+export ES_USER=elastic
+export ES_PASSWORD=changeme
+```
+
+Or create a `.env` file:
+```bash
+cp env.example .env
+# Edit .env with your credentials
+source .env
+```
+
+#### Option D: Config File
+
+Create `~/.coresigma/config.yml`:
+```yaml
+elasticsearch:
+  url: http://localhost:9200
+  username: elastic
+  password: changeme
+  # Or use API key instead:
+  # api_key: "your_base64_encoded_api_key"
+```
+
+Set permissions:
+```bash
+chmod 600 ~/.coresigma/config.yml
+```
+
+#### Verify Authentication
+
+```bash
+./scripts/setup_credentials.sh --test
+```
+
+### Step 5: Configure Index Templates
+
+```bash
+./scripts/setup_elasticsearch_templates.sh
+```
+
+This creates index templates for:
 - `macos-telemetry-esf-*` (ESF events)
 - `macos-telemetry-ul-*` (UL events)
 
-**Note**: Templates are automatically applied to new indices. If you have existing indices with wrong mapping, run:
-```bash
-bash scripts/fix_timestamp_mapping.sh
-```
-
-### Step 5: Configure Collectors
-
-#### ESF Collector Configuration
-
-The ESF collector requires root privileges. Create a launch daemon for automatic collection:
+### Step 6: Deploy Detection Rules
 
 ```bash
-# Create launch daemon plist
-sudo nano /Library/LaunchDaemons/com.macos.sigma.esf.plist
+python3 scripts/deploy_sigma_rules.py
 ```
 
-Add the following (adjust paths as needed):
+This converts all Sigma rules and deploys them as Kibana Detection Rules.
+
+### Step 7: Create Dashboards
+
+```bash
+python3 scripts/create_lens_dashboards_ndjson.py
+```
+
+## Running Collectors
+
+### ESF Collector (requires sudo)
+
+```bash
+# With intelligent filtering (recommended)
+sudo python3 collectors/esf_collector.py --output elasticsearch
+
+# Without filtering (all events - high volume!)
+sudo python3 collectors/esf_collector.py --output elasticsearch --no-filtering
+
+# Output to stdout for debugging
+sudo python3 collectors/esf_collector.py --output stdout
+```
+
+### UL Collector
+
+```bash
+# Standard mode
+python3 collectors/ul_collector.py --output elasticsearch
+
+# Without filtering
+python3 collectors/ul_collector.py --output elasticsearch --no-filtering
+```
+
+## Running as a Service
+
+### ESF Collector LaunchDaemon
+
+Create `/Library/LaunchDaemons/com.coresigma.esf.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -121,198 +189,94 @@ Add the following (adjust paths as needed):
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.macos.sigma.esf</string>
+    <string>com.coresigma.esf</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>/path/to/macos-sigma-pipelines-new/collectors/esf_collector.py</string>
+        <string>/path/to/macos-coresigma/venv/bin/python3</string>
+        <string>/path/to/macos-coresigma/collectors/esf_collector.py</string>
         <string>--output</string>
         <string>elasticsearch</string>
-        <string>--es-url</string>
-        <string>http://localhost:9200</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardErrorPath</key>
-    <string>/var/log/esf-collector.err</string>
+    <string>/var/log/coresigma-esf.err</string>
     <key>StandardOutPath</key>
-    <string>/var/log/esf-collector.log</string>
+    <string>/var/log/coresigma-esf.log</string>
 </dict>
 </plist>
 ```
 
 Load the daemon:
 ```bash
-sudo launchctl load /Library/LaunchDaemons/com.macos.sigma.esf.plist
+sudo launchctl load /Library/LaunchDaemons/com.coresigma.esf.plist
 ```
 
-#### UL Collector Configuration
+**Note**: When running as a LaunchDaemon, use the config file method for authentication (`~/.coresigma/config.yml` or set environment variables in the plist).
 
-For Unified Logging, you can run the collector as a regular user or service:
+## Verification
+
+### Check Elasticsearch Connection
 
 ```bash
-# Test run
-python3 collectors/ul_collector.py --output elasticsearch --es-url http://localhost:9200
+curl -u elastic:changeme http://localhost:9200
 ```
 
-### Step 6: Verify Installation
-
-Run the end-to-end test suite:
+### Check Indices
 
 ```bash
-python3 tests/test_e2e.py --es-url http://localhost:9200
+curl -u elastic:changeme "http://localhost:9200/_cat/indices?v" | grep macos
 ```
 
-Expected output:
-```
-======================================================================
-End-to-End Test Suite
-======================================================================
-
-✓ PASS: Elasticsearch Connection
-  Connected to cluster: docker-cluster
-
-✓ PASS: Pipeline Loading
-  ESF pipeline: macos-esf, UL pipeline: macos-ul
-
-✓ PASS: Rule Conversion
-  Converted process_execution_suspicious.yml to: event_type:9 AND Image:(...
-
-✓ PASS: Event Ingestion
-  Event indexed and retrieved successfully (ID: ...)
-
-✓ PASS: Query Execution
-  Query executed successfully: event_type:9 AND ProcessId:12345 (found 1 results)
-
-======================================================================
-Test Summary
-======================================================================
-Passed: 5/5
-
-✓ All tests passed!
-```
-
-## Configuration
-
-### Pipeline Configuration
-
-The pipeline files are located in `pipelines/`:
-
-- **`pipelines/macos_esf.yml`** - ESF event pipeline configuration
-- **`pipelines/macos_ul.yml`** - Unified Logging pipeline configuration
-
-These files define:
-- Field mappings from native ESF/UL format to Sigma standard fields
-- Log source definitions for different event categories
-- Transformation rules
-
-### Field Mappings
-
-Key field mappings:
-
-| Native Field | Sigma Field | Example |
-|-------------|-------------|---------|
-| `process.executable.path` | `Image` | `/usr/bin/ls` |
-| `event.exec.args[]` | `CommandLine` | `ls -la /tmp` |
-| `process.audit_token.pid` | `ProcessId` | `12345` |
-| `process.ppid` | `ParentProcessId` | `12340` |
-
-### Index Patterns
-
-Events are indexed with date-based patterns:
-- ESF: `macos-telemetry-esf-YYYY.MM.DD`
-- UL: `macos-telemetry-ul-YYYY.MM.DD`
-
-## Usage
-
-### Converting Sigma Rules
-
-Convert a rule to Elasticsearch Lucene query:
+### Check Detection Rules
 
 ```bash
-sigma convert -t lucene \
-  -p pipelines/macos_esf.yml \
-  rules/esf/process_execution_suspicious.yml
+curl -u elastic:changeme "http://localhost:5601/api/detection_engine/rules/_find" \
+  -H "kbn-xsrf: true" | python3 -m json.tool | head -20
 ```
 
-Convert to Elasticsearch EQL:
+### Check Events in Kibana
 
-```bash
-sigma convert -t eql \
-  -p pipelines/macos_esf.yml \
-  rules/esf/process_execution_suspicious.yml
-```
-
-### Running Collectors Manually
-
-**ESF Collector:**
-```bash
-sudo python3 collectors/esf_collector.py \
-  --output elasticsearch \
-  --es-url http://localhost:9200
-```
-
-**UL Collector:**
-```bash
-python3 collectors/ul_collector.py \
-  --output elasticsearch \
-  --es-url http://localhost:9200
-```
-
-### Testing with Sample Data
-
-Create a test event:
-
-```bash
-# Trigger a test process execution
-/bin/ls /tmp
-
-# Check if event appears in Elasticsearch
-curl -X GET "localhost:9200/macos-telemetry-esf-*/_search?q=Image:/bin/ls&pretty"
-```
+1. Open http://localhost:5601
+2. Go to **Discover**
+3. Select `macos-telemetry-esf-*` or `macos-telemetry-ul-*` index pattern
+4. You should see events flowing in
 
 ## Troubleshooting
 
-### Collector Not Starting
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and solutions.
 
-**Issue**: ESF collector fails with permission errors
+### Quick Fixes
 
-**Solution**: Ensure the collector is running with root privileges:
+**No events appearing:**
 ```bash
-sudo python3 collectors/esf_collector.py
+# Check if collector is running
+ps aux | grep collector
+
+# Check collector logs
+tail -f /var/log/coresigma-esf.log
 ```
 
-### Events Not Appearing in Elasticsearch
+**Authentication errors:**
+```bash
+# Test credentials
+./scripts/setup_credentials.sh --test
 
-**Issue**: Collector running but no events in Elasticsearch
+# Reset credentials
+./scripts/setup_credentials.sh
+```
 
-**Solution**:
-1. Check Elasticsearch is running: `curl http://localhost:9200`
-2. Check collector logs: `/var/log/esf-collector.log`
-3. Verify index exists: `curl "localhost:9200/_cat/indices?v"`
-
-### Rule Conversion Fails
-
-**Issue**: `sigma convert` fails with pipeline errors
-
-**Solution**:
-1. Verify pipeline YAML syntax: `python3 -c "import yaml; yaml.safe_load(open('pipelines/macos_esf.yml'))"`
-2. Check rule file format matches Sigma specification
-3. Ensure field names in rule match pipeline mappings
+**Index template issues:**
+```bash
+# Re-run template setup
+./scripts/setup_elasticsearch_templates.sh
+```
 
 ## Next Steps
 
-- Review the sample rules in `rules/esf/` and `rules/ul/`
-- Create custom rules for your environment
-- Set up Kibana dashboards for visualization
-- Configure alerting rules in Elasticsearch
-
-## Additional Resources
-
-- [Sigma Project Documentation](https://github.com/SigmaHQ/sigma)
-- [pySigma Documentation](https://sigmahq-pysigma.readthedocs.io/)
-- [macOS Endpoint Security Framework](https://developer.apple.com/documentation/endpointsecurity)
-- [Elasticsearch Query DSL](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html)
-
+- Review [QUICKSTART.md](QUICKSTART.md) for a quick walkthrough
+- Read [FILTERING_CONFIGURATION.md](FILTERING_CONFIGURATION.md) for tuning
+- Check [KIBANA_SETUP.md](KIBANA_SETUP.md) for dashboard configuration
+- Explore rules in `rules/esf/` and `rules/ul/`

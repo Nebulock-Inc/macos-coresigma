@@ -39,30 +39,52 @@ source venv/bin/activate
 
 # Start Elasticsearch and Kibana (if using Docker)
 docker-compose up -d
+
+# Set up credentials (one-time, stores in macOS Keychain)
+./scripts/setup_credentials.sh
 ```
 
 ### Running the ESF Collector
 
 ```bash
 # With intelligent filtering (recommended - reduces volume by 98.5%)
-ES_USER=elastic ES_PASSWORD=changeme sudo python3 collectors/esf_collector.py --output elasticsearch
+sudo python3 collectors/esf_collector.py --output elasticsearch
 
 # Without filtering (all events)
-ES_USER=elastic ES_PASSWORD=changeme sudo python3 collectors/esf_collector.py --output elasticsearch --no-filtering
+sudo python3 collectors/esf_collector.py --output elasticsearch --no-filtering
 ```
 
 ### Running the UL Collector
 
 ```bash
 # Unified Logging collector (no sudo required)
-ES_USER=elastic ES_PASSWORD=changeme python3 collectors/ul_collector.py --output elasticsearch
+python3 collectors/ul_collector.py --output elasticsearch
 ```
 
 ### Creating Kibana Dashboards
 
 ```bash
 # Create security dashboards
-ES_USER=elastic ES_PASSWORD=changeme python3 scripts/create_lens_dashboards_ndjson.py
+python3 scripts/create_lens_dashboards_ndjson.py
+```
+
+### Authentication
+
+Credentials are automatically loaded from (in priority order):
+1. `ES_API_KEY` environment variable
+2. macOS Keychain (recommended for local dev)
+3. `ES_USER`/`ES_PASSWORD` environment variables
+4. `~/.coresigma/config.yml`
+
+```bash
+# Setup credentials in Keychain (recommended)
+./scripts/setup_credentials.sh
+
+# Or create an API key (recommended for production)
+./scripts/setup_credentials.sh --api-key
+
+# Test authentication
+./scripts/setup_credentials.sh --test
 ```
 
 ## 📁 Directory Structure
@@ -162,9 +184,12 @@ docker-compose up -d
 # Wait for services to be ready
 ./scripts/start_services.sh
 
-# Create index patterns and dashboards
-./scripts/create_kibana_data_view.sh
-ES_USER=elastic ES_PASSWORD=changeme python3 scripts/create_lens_dashboards_ndjson.py
+# Set up credentials (one-time)
+./scripts/setup_credentials.sh
+
+# Create index templates and dashboards
+./scripts/setup_elasticsearch_templates.sh
+python3 scripts/create_lens_dashboards_ndjson.py
 ```
 
 ## 📚 Documentation
