@@ -1,0 +1,652 @@
+#!/usr/bin/env python3
+"""
+Create Lens dashboards using NDJSON import - the most reliable method.
+
+This approach:
+1. Creates proper NDJSON structure matching Kibana's expected format
+2. Uses the _import API which handles all the complexity
+"""
+
+import json
+import os
+import sys
+import requests
+import uuid
+import tempfile
+from datetime import datetime
+
+KIBANA_URL = os.environ.get("KIBANA_URL", "http://localhost:5601")
+ES_URL = os.environ.get("ES_URL", "http://localhost:9200")
+ES_USER = os.environ.get("ES_USER", "elastic")
+ES_PASSWORD = os.environ.get("ES_PASSWORD", "changeme")
+
+
+def get_or_create_data_view():
+    """Get or create the data view and return its ID."""
+    auth = (ES_USER, ES_PASSWORD)
+    headers = {"kbn-xsrf": "true", "Content-Type": "application/json"}
+    
+    # Check existing
+    resp = requests.get(f"{KIBANA_URL}/api/data_views", headers=headers, auth=auth)
+    if resp.status_code == 200:
+        for dv in resp.json().get("data_view", []):
+            if dv.get("title") == "macos-telemetry-esf-*":
+                return dv.get("id")
+    
+    # Create new
+    resp = requests.post(
+        f"{KIBANA_URL}/api/data_views/data_view",
+        headers=headers,
+        auth=auth,
+        json={
+            "data_view": {
+                "title": "macos-telemetry-esf-*",
+                "name": "macOS ESF Events",
+                "timeFieldName": "@timestamp"
+            }
+        }
+    )
+    if resp.status_code == 200:
+        return resp.json().get("data_view", {}).get("id")
+    return None
+
+
+def get_keyword_fields():
+    """Get fields that support keyword aggregations."""
+    auth = (ES_USER, ES_PASSWORD)
+    resp = requests.get(f"{ES_URL}/macos-telemetry-esf-*/_mapping", auth=auth)
+    
+    if resp.status_code != 200:
+        return set()
+    
+    keyword_fields = set()
+    
+    for index_data in resp.json().values():
+        props = index_data.get("mappings", {}).get("properties", {})
+        
+        def extract_fields(properties, prefix=""):
+            for field_name, field_config in properties.items():
+                full_name = f"{prefix}{field_name}" if prefix else field_name
+                field_type = field_config.get("type")
+                
+                if field_type == "keyword":
+                    keyword_fields.add(full_name)
+                elif field_type == "text" and "keyword" in field_config.get("fields", {}):
+                    keyword_fields.add(f"{full_name}.keyword")
+                
+                if "properties" in field_config:
+                    extract_fields(field_config["properties"], f"{full_name}.")
+        
+        extract_fields(props)
+        break
+    
+    return keyword_fields
+
+
+def create_lens_saved_object(vis_id: str, title: str, vis_type: str, layer_config: dict, data_view_id: str) -> dict:
+    """Create a Lens saved object in NDJSON format."""
+    layer_id = layer_config["layer_id"]
+    
+    return {
+        "id": vis_id,
+        "type": "lens",
+        "version": "1",
+        "coreMigrationVersion": "8.8.0",
+        "typeMigrationVersion": "8.9.0",
+        "managed": False,
+        "attributes": {
+            "title": title,
+            "description": "",
+            "visualizationType": vis_type,
+            "state": {
+                "visualization": layer_config["visualization"],
+                "query": {"query": "", "language": "kuery"},
+                "filters": [],
+                "datasourceStates": {
+                    "formBased": {
+                        "layers": {
+                            layer_id: layer_config["layer"]
+                        }
+                    }
+                },
+                "internalReferences": [],
+                "adHocDataViews": {}
+            }
+        },
+        "references": [
+            {
+                "type": "index-pattern",
+                "id": data_view_id,
+                "name": f"indexpattern-datasource-layer-{layer_id}"
+            }
+        ]
+    }
+
+
+def create_metric_config(data_view_id: str) -> dict:
+    """Create metric visualization config."""
+    layer_id = str(uuid.uuid4())
+    col_id = str(uuid.uuid4())
+    
+    return {
+        "layer_id": layer_id,
+        "visualization": {
+            "layerId": layer_id,
+            "layerType": "data",
+            "metricAccessor": col_id
+        },
+        "layer": {
+            "columnOrder": [col_id],
+            "columns": {
+                col_id: {
+                    "label": "Count",
+                    "dataType": "number",
+                    "operationType": "count",
+                    "isBucketed": False,
+                    "scale": "ratio",
+                    "sourceField": "___records___"
+                }
+            },
+            "incompleteColumns": {}
+        }
+    }
+
+
+def create_pie_config(field: str, top_n: int = 10) -> dict:
+    """Create pie chart config."""
+    layer_id = str(uuid.uuid4())
+    bucket_col = str(uuid.uuid4())
+    metric_col = str(uuid.uuid4())
+    
+    return {
+        "layer_id": layer_id,
+        "visualization": {
+            "shape": "donut",
+            "layers": [{
+                "layerId": layer_id,
+                "layerType": "data",
+                "primaryGroups": [bucket_col],
+                "metrics": [metric_col],
+                "numberDisplay": "percent",
+                "categoryDisplay": "default",
+                "legendDisplay": "show",
+                "nestedLegend": False
+            }]
+        },
+        "layer": {
+            "columnOrder": [bucket_col, metric_col],
+            "columns": {
+                bucket_col: {
+                    "label": f"Top {top_n}",
+                    "dataType": "string",
+                    "operationType": "terms",
+                    "scale": "ordinal",
+                    "sourceField": field,
+                    "isBucketed": True,
+                    "params": {
+                        "size": top_n,
+                        "orderBy": {"type": "column", "columnId": metric_col},
+                        "orderDirection": "desc",
+                        "otherBucket": True,
+                        "missingBucket": False
+                    }
+                },
+                metric_col: {
+                    "label": "Count",
+                    "dataType": "number",
+                    "operationType": "count",
+                    "isBucketed": False,
+                    "scale": "ratio",
+                    "sourceField": "___records___"
+                }
+            },
+            "incompleteColumns": {}
+        }
+    }
+
+
+def create_timeline_config(split_field: str = None, top_n: int = 10) -> dict:
+    """Create timeline (area chart) config."""
+    layer_id = str(uuid.uuid4())
+    date_col = str(uuid.uuid4())
+    metric_col = str(uuid.uuid4())
+    split_col = str(uuid.uuid4()) if split_field else None
+    
+    columns = {
+        date_col: {
+            "label": "@timestamp",
+            "dataType": "date",
+            "operationType": "date_histogram",
+            "scale": "interval",
+            "sourceField": "@timestamp",
+            "isBucketed": True,
+            "params": {"interval": "auto"}
+        },
+        metric_col: {
+            "label": "Count",
+            "dataType": "number",
+            "operationType": "count",
+            "isBucketed": False,
+            "scale": "ratio",
+            "sourceField": "___records___"
+        }
+    }
+    column_order = [date_col]
+    
+    layer_viz = {
+        "layerId": layer_id,
+        "layerType": "data",
+        "seriesType": "area_stacked",
+        "accessors": [metric_col],
+        "xAccessor": date_col
+    }
+    
+    if split_field:
+        columns[split_col] = {
+            "label": split_field.split(".")[-1].replace(".keyword", ""),
+            "dataType": "string",
+            "operationType": "terms",
+            "scale": "ordinal",
+            "sourceField": split_field,
+            "isBucketed": True,
+            "params": {
+                "size": top_n,
+                "orderBy": {"type": "column", "columnId": metric_col},
+                "orderDirection": "desc",
+                "otherBucket": False,
+                "missingBucket": False
+            }
+        }
+        column_order.append(split_col)
+        layer_viz["splitAccessor"] = split_col
+    
+    column_order.append(metric_col)
+    
+    return {
+        "layer_id": layer_id,
+        "visualization": {
+            "legend": {"isVisible": True, "position": "right"},
+            "valueLabels": "hide",
+            "preferredSeriesType": "area_stacked",
+            "layers": [layer_viz]
+        },
+        "layer": {
+            "columnOrder": column_order,
+            "columns": columns,
+            "incompleteColumns": {}
+        }
+    }
+
+
+def create_table_config(fields: list, top_n: int = 20, ascending: bool = False) -> dict:
+    """Create table config."""
+    layer_id = str(uuid.uuid4())
+    metric_col = str(uuid.uuid4())
+    
+    columns = {}
+    column_order = []
+    vis_columns = []
+    
+    for field in fields:
+        col_id = str(uuid.uuid4())
+        column_order.append(col_id)
+        vis_columns.append({"columnId": col_id})
+        columns[col_id] = {
+            "label": field.split(".")[-1].replace(".keyword", ""),
+            "dataType": "string",
+            "operationType": "terms",
+            "scale": "ordinal",
+            "sourceField": field,
+            "isBucketed": True,
+            "params": {
+                "size": top_n,
+                "orderBy": {"type": "column", "columnId": metric_col},
+                "orderDirection": "asc" if ascending else "desc",
+                "otherBucket": False,
+                "missingBucket": False
+            }
+        }
+    
+    column_order.append(metric_col)
+    vis_columns.append({"columnId": metric_col})
+    columns[metric_col] = {
+        "label": "Count",
+        "dataType": "number",
+        "operationType": "count",
+        "isBucketed": False,
+        "scale": "ratio",
+        "sourceField": "___records___"
+    }
+    
+    return {
+        "layer_id": layer_id,
+        "visualization": {
+            "layerId": layer_id,
+            "layerType": "data",
+            "columns": vis_columns
+        },
+        "layer": {
+            "columnOrder": column_order,
+            "columns": columns,
+            "incompleteColumns": {}
+        }
+    }
+
+
+def create_bar_config(field: str, top_n: int = 15, horizontal: bool = True) -> dict:
+    """Create bar chart config."""
+    layer_id = str(uuid.uuid4())
+    bucket_col = str(uuid.uuid4())
+    metric_col = str(uuid.uuid4())
+    
+    return {
+        "layer_id": layer_id,
+        "visualization": {
+            "legend": {"isVisible": True, "position": "right"},
+            "valueLabels": "hide",
+            "preferredSeriesType": "bar_horizontal" if horizontal else "bar",
+            "layers": [{
+                "layerId": layer_id,
+                "layerType": "data",
+                "seriesType": "bar_horizontal" if horizontal else "bar",
+                "accessors": [metric_col],
+                "xAccessor": bucket_col
+            }]
+        },
+        "layer": {
+            "columnOrder": [bucket_col, metric_col],
+            "columns": {
+                bucket_col: {
+                    "label": field.split(".")[-1].replace(".keyword", ""),
+                    "dataType": "string",
+                    "operationType": "terms",
+                    "scale": "ordinal",
+                    "sourceField": field,
+                    "isBucketed": True,
+                    "params": {
+                        "size": top_n,
+                        "orderBy": {"type": "column", "columnId": metric_col},
+                        "orderDirection": "desc",
+                        "otherBucket": False,
+                        "missingBucket": False
+                    }
+                },
+                metric_col: {
+                    "label": "Count",
+                    "dataType": "number",
+                    "operationType": "count",
+                    "isBucketed": False,
+                    "scale": "ratio",
+                    "sourceField": "___records___"
+                }
+            },
+            "incompleteColumns": {}
+        }
+    }
+
+
+def create_dashboard_saved_object(dashboard_id: str, title: str, description: str, panels: list, vis_ids: list) -> dict:
+    """Create a dashboard saved object."""
+    # Build references matching Kibana's expected format: "{panelIndex}:panel_{panelIndex}"
+    references = []
+    for i, vis_id in enumerate(vis_ids):
+        references.append({
+            "type": "lens",
+            "id": vis_id,
+            "name": f"{i}:panel_{i}"
+        })
+    
+    # Update panels to use matching panelRefName format
+    updated_panels = []
+    for panel in panels:
+        updated_panel = panel.copy()
+        # Extract panel index from the panelRefName (e.g., "panel_0" -> "0")
+        if "panelRefName" in updated_panel:
+            idx = updated_panel["panelRefName"].replace("panel_", "")
+            updated_panel["panelRefName"] = f"panel_{idx}"
+        updated_panels.append(updated_panel)
+    
+    return {
+        "id": dashboard_id,
+        "type": "dashboard",
+        "version": "1",
+        "coreMigrationVersion": "8.8.0",
+        "typeMigrationVersion": "8.9.0",
+        "managed": False,
+        "attributes": {
+            "title": title,
+            "description": description,
+            "version": 1,
+            "panelsJSON": json.dumps(updated_panels),
+            "optionsJSON": json.dumps({"useMargins": True, "syncColors": True, "syncCursor": True, "syncTooltips": False, "hidePanelTitles": False}),
+            "refreshInterval": {"pause": True, "value": 60000},
+            "timeRestore": True,
+            "timeTo": "now",
+            "timeFrom": "now-24h",
+            "kibanaSavedObjectMeta": {
+                "searchSourceJSON": json.dumps({"query": {"query": "", "language": "kuery"}, "filter": []})
+            }
+        },
+        "references": references
+    }
+
+
+def import_ndjson(objects: list, batch_name: str = "objects"):
+    """Import objects using the Kibana import API."""
+    auth = (ES_USER, ES_PASSWORD)
+    
+    # Create NDJSON content
+    ndjson_lines = [json.dumps(obj) for obj in objects]
+    ndjson_content = "\n".join(ndjson_lines)
+    
+    # Use multipart form upload
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.ndjson', delete=False) as f:
+        f.write(ndjson_content)
+        temp_path = f.name
+    
+    try:
+        with open(temp_path, 'rb') as f:
+            files = {'file': ('import.ndjson', f, 'application/ndjson')}
+            resp = requests.post(
+                f"{KIBANA_URL}/api/saved_objects/_import?overwrite=true",
+                headers={"kbn-xsrf": "true"},
+                auth=auth,
+                files=files
+            )
+        
+        if resp.status_code == 200:
+            result = resp.json()
+            if result.get("success"):
+                return True, f"Imported {result.get('successCount', 0)} {batch_name}"
+            else:
+                errors = result.get("errors", [])
+                error_details = []
+                for err in errors[:3]:
+                    error_details.append(f"{err.get('id')}: {err.get('error', {}).get('message', 'Unknown')}")
+                return False, f"Errors: {'; '.join(error_details)}"
+        else:
+            return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
+    finally:
+        os.unlink(temp_path)
+
+
+def main():
+    print("=" * 70)
+    print("Creating Lens Dashboards via NDJSON Import")
+    print("=" * 70)
+    print(f"Time: {datetime.now().isoformat()}")
+    
+    # Get data view
+    print("\nGetting data view...")
+    data_view_id = get_or_create_data_view()
+    if not data_view_id:
+        print("Cannot get/create data view!")
+        sys.exit(1)
+    print(f"  Data view ID: {data_view_id}")
+    
+    # Check field mappings
+    print("\nChecking field mappings...")
+    keyword_fields = get_keyword_fields()
+    
+    # Determine parent field - must be a keyword field for aggregations
+    # After collector fix, these fields should now be populated for exec/fork events
+    if "process.parent.executable.keyword" in keyword_fields:
+        parent_field = "process.parent.executable.keyword"
+    elif "process.parent.executable" in keyword_fields:
+        parent_field = "process.parent.executable"  # Already keyword type
+    elif "process.parent.name.keyword" in keyword_fields:
+        parent_field = "process.parent.name.keyword"
+    elif "process.parent.name" in keyword_fields:
+        parent_field = "process.parent.name"  # Already keyword type
+    else:
+        # Use process.parent.executable.keyword - collector now populates this
+        parent_field = "process.parent.executable.keyword"
+        print(f"  ℹ️ Parent field not yet in index (restart collector and generate events)")
+    print(f"  Parent process field: {parent_field}")
+    print(f"  Available keyword fields: {len(keyword_fields)}")
+    
+    # ============================================================
+    # Build all saved objects
+    # ============================================================
+    all_objects = []
+    
+    # --- Simple Dashboard Visualizations ---
+    simple_vis = [
+        ("lens-simple-total", "Total Events", "lnsMetric", create_metric_config(data_view_id)),
+        ("lens-simple-actions", "Event Actions", "lnsPie", create_pie_config("event.action.keyword", 10)),
+        ("lens-simple-users", "Users", "lnsPie", create_pie_config("process.user.name.keyword", 10)),
+        ("lens-simple-timeline", "Events Over Time", "lnsXY", create_timeline_config("event.action.keyword", 8)),
+        ("lens-simple-processes", "Top Processes", "lnsDatatable", create_table_config(["process.executable.keyword"], 15)),
+    ]
+    
+    for vis_id, title, vis_type, config in simple_vis:
+        obj = create_lens_saved_object(vis_id, title, vis_type, config, data_view_id)
+        all_objects.append(obj)
+    
+    # Simple dashboard panels - updated layout from user export
+    simple_panels = [
+        {"type": "lens", "gridData": {"x": 0, "y": 0, "w": 12, "h": 12, "i": "0"}, "panelIndex": "0", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_0"},
+        {"type": "lens", "gridData": {"x": 12, "y": 0, "w": 18, "h": 12, "i": "1"}, "panelIndex": "1", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_1"},
+        {"type": "lens", "gridData": {"x": 30, "y": 0, "w": 18, "h": 12, "i": "2"}, "panelIndex": "2", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_2"},
+        {"type": "lens", "gridData": {"x": 0, "y": 12, "w": 48, "h": 14, "i": "3"}, "panelIndex": "3", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_3"},
+        {"type": "lens", "gridData": {"x": 0, "y": 26, "w": 48, "h": 12, "i": "4"}, "panelIndex": "4", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_4"},
+    ]
+    simple_vis_ids = [v[0] for v in simple_vis]
+    
+    simple_dashboard = create_dashboard_saved_object(
+        "macos-security-dashboard",
+        "macOS Security Dashboard",
+        "Overview of macOS security events",
+        simple_panels,
+        simple_vis_ids
+    )
+    all_objects.append(simple_dashboard)
+    
+    # --- Comprehensive Dashboard Visualizations ---
+    # Added Event Categories (event.category.keyword) per user request
+    comp_vis = [
+        ("lens-comp-total", "Total Events", "lnsMetric", create_metric_config(data_view_id)),
+        ("lens-comp-categories", "Event Categories", "lnsPie", create_pie_config("event.category.keyword", 15)),  # NEW
+        ("lens-comp-actions", "Event Actions", "lnsPie", create_pie_config("event.action.keyword", 15)),
+        ("lens-comp-users", "Users", "lnsPie", create_pie_config("process.user.name.keyword", 15)),
+        ("lens-comp-groups", "Groups", "lnsPie", create_pie_config("process.group.name.keyword", 15)),
+        ("lens-comp-timeline", "Events Over Time", "lnsXY", create_timeline_config("event.action.keyword", 10)),
+        ("lens-comp-event-types", "ESF Event Types", "lnsPie", create_pie_config("esf.event_type", 20)),
+        ("lens-comp-security", "Security Events", "lnsXY", create_bar_config("event.action.keyword", 15)),
+        ("lens-comp-cmdlines", "Top Command Lines", "lnsDatatable", create_table_config(["process.command_line.keyword"], 20)),
+        ("lens-comp-executables", "Top Executables", "lnsDatatable", create_table_config(["process.executable.keyword"], 20)),
+        ("lens-comp-parent-child", "Parent → Child", "lnsDatatable", create_table_config([parent_field, "process.executable.keyword"], 15)),
+        ("lens-comp-rare-exec", "Rare Executables", "lnsDatatable", create_table_config(["process.executable.keyword"], 30, ascending=True)),
+        ("lens-comp-rare-proc", "Rare Processes", "lnsDatatable", create_table_config(["process.name.keyword"], 30, ascending=True)),
+        ("lens-comp-rare-cmd", "Rare Commands", "lnsDatatable", create_table_config(["process.command_line.keyword"], 30, ascending=True)),
+        ("lens-comp-rare-parent", "Rare Parent→Child", "lnsDatatable", create_table_config([parent_field, "process.executable.keyword"], 20, ascending=True)),
+        ("lens-comp-files", "File Operations", "lnsXY", create_bar_config("file.path.keyword", 15)),
+    ]
+    
+    for vis_id, title, vis_type, config in comp_vis:
+        obj = create_lens_saved_object(vis_id, title, vis_type, config, data_view_id)
+        all_objects.append(obj)
+    
+    # Comprehensive dashboard panels - updated layout from user export (2026-01-21)
+    # Row 1: Total Events (0), Event Categories (1), Event Actions (2)
+    # Row 2: ESF Event Types (6), Users (3), Groups (4)
+    # Row 3: Events Over Time (5)
+    # Row 4: Security Events (7)
+    # Row 5: Top Command Lines (8), Top Executables (9)
+    # Row 6: Parent → Child (10)
+    # Row 7: Rare Executables (11), Rare Processes (12)
+    # Row 8: Rare Commands (13), Rare Parent→Child (14)
+    # Row 9: File Operations (15)
+    comp_panels = [
+        # Row 1 - Overview metrics and pie charts
+        {"type": "lens", "gridData": {"x": 0, "y": 0, "w": 8, "h": 14, "i": "0"}, "panelIndex": "0", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_0"},
+        {"type": "lens", "gridData": {"x": 8, "y": 0, "w": 18, "h": 14, "i": "1"}, "panelIndex": "1", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_1"},
+        {"type": "lens", "gridData": {"x": 26, "y": 0, "w": 22, "h": 14, "i": "2"}, "panelIndex": "2", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_2"},
+        # Row 2 - ESF Types, Users, Groups
+        {"type": "lens", "gridData": {"x": 0, "y": 14, "w": 16, "h": 12, "i": "6"}, "panelIndex": "6", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_6"},
+        {"type": "lens", "gridData": {"x": 16, "y": 14, "w": 18, "h": 12, "i": "3"}, "panelIndex": "3", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_3"},
+        {"type": "lens", "gridData": {"x": 34, "y": 14, "w": 14, "h": 12, "i": "4"}, "panelIndex": "4", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_4"},
+        # Row 3 - Timeline
+        {"type": "lens", "gridData": {"x": 0, "y": 26, "w": 48, "h": 12, "i": "5"}, "panelIndex": "5", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_5"},
+        # Row 4 - Security Events bar chart
+        {"type": "lens", "gridData": {"x": 0, "y": 38, "w": 48, "h": 12, "i": "7"}, "panelIndex": "7", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_7"},
+        # Row 5 - Top Command Lines and Executables
+        {"type": "lens", "gridData": {"x": 0, "y": 50, "w": 24, "h": 14, "i": "8"}, "panelIndex": "8", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_8"},
+        {"type": "lens", "gridData": {"x": 24, "y": 50, "w": 24, "h": 14, "i": "9"}, "panelIndex": "9", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_9"},
+        # Row 6 - Parent → Child
+        {"type": "lens", "gridData": {"x": 0, "y": 64, "w": 48, "h": 14, "i": "10"}, "panelIndex": "10", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_10"},
+        # Row 7 - Rare Executables, Rare Processes
+        {"type": "lens", "gridData": {"x": 0, "y": 78, "w": 35, "h": 14, "i": "11"}, "panelIndex": "11", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_11"},
+        {"type": "lens", "gridData": {"x": 35, "y": 78, "w": 13, "h": 14, "i": "12"}, "panelIndex": "12", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_12"},
+        # Row 8 - Rare Commands, Rare Parent→Child
+        {"type": "lens", "gridData": {"x": 0, "y": 92, "w": 24, "h": 14, "i": "13"}, "panelIndex": "13", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_13"},
+        {"type": "lens", "gridData": {"x": 24, "y": 92, "w": 24, "h": 14, "i": "14"}, "panelIndex": "14", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_14"},
+        # Row 9 - File Operations
+        {"type": "lens", "gridData": {"x": 0, "y": 106, "w": 48, "h": 12, "i": "15"}, "panelIndex": "15", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_15"},
+    ]
+    comp_vis_ids = [v[0] for v in comp_vis]
+    
+    comp_dashboard = create_dashboard_saved_object(
+        "macos-comprehensive-security-dashboard",
+        "macOS Comprehensive Security Dashboard",
+        "Full security analysis with Lens visualizations",
+        comp_panels,
+        comp_vis_ids
+    )
+    all_objects.append(comp_dashboard)
+    
+    # ============================================================
+    # Import in batches for better error identification
+    # ============================================================
+    
+    # Separate visualizations and dashboards
+    vis_objects = [obj for obj in all_objects if obj.get("type") == "lens"]
+    dash_objects = [obj for obj in all_objects if obj.get("type") == "dashboard"]
+    
+    print(f"\nImporting {len(vis_objects)} visualizations...")
+    success, message = import_ndjson(vis_objects, "visualizations")
+    if success:
+        print(f"  ✓ {message}")
+    else:
+        print(f"  ✗ {message}")
+        # Try one by one to find the problem
+        print("  Trying individual imports to identify problem...")
+        for obj in vis_objects:
+            s, m = import_ndjson([obj], f"viz {obj.get('id')}")
+            if not s:
+                print(f"    ✗ {obj.get('id')}: {m}")
+    
+    print(f"\nImporting {len(dash_objects)} dashboards...")
+    success, message = import_ndjson(dash_objects, "dashboards")
+    if success:
+        print(f"  ✓ {message}")
+    else:
+        print(f"  ✗ {message}")
+    
+    print("\n" + "=" * 70)
+    print("Done! Refresh Kibana to see the dashboards.")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
