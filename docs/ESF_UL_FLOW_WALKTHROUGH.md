@@ -137,14 +137,13 @@ detection:
 
 #### Step 3.1: Pipeline Initialization
 
-**Location**: `pysigma-pipeline-macos-esf/pysigma_pipeline_macos_esf/pipeline.py`
+**Location**: `pySigma-backend-elasticsearch/sigma/pipelines/elasticsearch/macos.py`
 
 **Usage**:
 ```python
-from pysigma_pipeline_macos_esf import MacOSESFPipeline
+from sigma.pipelines.elasticsearch import ecs_macos_esf
 
-pipeline = MacOSESFPipeline()
-processing_pipeline = pipeline.apply()
+pipeline = ecs_macos_esf()
 ```
 
 **Pipeline Structure**:
@@ -339,7 +338,7 @@ normalized = {
 
 #### Step 3: UL Pipeline Processing
 
-**Location**: `pysigma-pipeline-macos-ul/pysigma_pipeline_macos_ul/pipeline.py`
+**Location**: `pySigma-backend-elasticsearch/sigma/pipelines/elasticsearch/macos.py` (function: `ecs_macos_ul`)
 
 **Field Mappings**:
 ```python
@@ -375,19 +374,17 @@ Based on the [pysigma-backend-elasticsearch repository](https://github.com/Sigma
 
 #### 1. **Pipeline Interface** ✅
 
-**Our Implementation**:
+**Official Implementation** (in `pySigma-backend-elasticsearch`):
 ```python
-from sigma.pipelines.base import Pipeline
 from sigma.processing.pipeline import ProcessingPipeline
 
-class MacOSESFPipeline(Pipeline):
-    def apply(self) -> ProcessingPipeline:
-        return ProcessingPipeline(...)
+def ecs_macos_esf() -> ProcessingPipeline:
+    return ProcessingPipeline(...)
 ```
 
 **Backend Expectation**:
 - Backend accepts `ProcessingPipeline` objects
-- Works with any pipeline that implements `Pipeline` interface
+- Works with any pipeline function that returns `ProcessingPipeline`
 - ✅ **Compatible**
 
 #### 2. **Field Mapping Transformation** ✅
@@ -480,8 +477,11 @@ sigma convert -p macos-esf -t lucene rule.yml
 
 ```bash
 # Standard sigma CLI usage
-sigma convert -p macos-esf -t lucene rule.yml
-sigma convert -p macos-ul -t lucene rule.yml
+sigma convert -t elasticsearch -p ecs_macos_esf rule.yml
+sigma convert -t elasticsearch -p ecs_macos_ul rule.yml
+
+# EQL output
+sigma convert -t elasticsearch -f eql -p ecs_macos_esf rule.yml
 ```
 
 **Compatibility**: ✅ Works with standard `sigma` CLI tool
@@ -490,13 +490,13 @@ sigma convert -p macos-ul -t lucene rule.yml
 
 ```python
 from sigma.collection import SigmaCollection
-from sigma.backends.elasticsearch import LuceneBackend
-from pysigma_pipeline_macos_esf import MacOSESFPipeline
+from sigma.backends.elasticsearch import LuceneBackend, EqlBackend
+from sigma.pipelines.elasticsearch import ecs_macos_esf
 
 rules = SigmaCollection.from_yaml("rule.yml")
-pipeline = MacOSESFPipeline()
-backend = LuceneBackend(processing_pipeline=pipeline.apply())
-queries = backend.convert_collection(rules)
+pipeline = ecs_macos_esf()
+backend = LuceneBackend(pipeline)
+queries = backend.convert(rules)
 ```
 
 **Compatibility**: ✅ Works with standard pySigma Python API
@@ -656,7 +656,8 @@ ProcessingItem(
 
 ## References
 
-- [pysigma-backend-elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch)
+- [pySigma-backend-elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) - Contains `ecs_macos_esf` and `ecs_macos_ul` pipelines
 - [pySigma Documentation](https://github.com/SigmaHQ/pySigma)
 - [Sigma Specification](https://github.com/SigmaHQ/sigma-specification)
+- [macOS CoreSigma](https://github.com/Nebulock-Inc/macos-coresigma) - This project
 
