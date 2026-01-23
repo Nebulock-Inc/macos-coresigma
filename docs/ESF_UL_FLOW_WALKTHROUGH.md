@@ -45,7 +45,7 @@ This document provides a complete walkthrough of how macOS ESF and UL events flo
 
 #### Step 1.2: Collector Normalization
 
-**Function**: `ESFCollector.normalize_event()`
+**Method**: `collectors/esf_collector.py` → `ESFCollector.normalize_event()`
 
 **Transformation**:
 ```python
@@ -74,7 +74,7 @@ normalized = {
 
 #### Step 1.3: Index to Elasticsearch
 
-**Location**: `ESFCollector.send_to_elasticsearch()`
+**Location**: `collectors/esf_collector.py` → `ESFCollector.send_to_elasticsearch()` method
 
 **Index**: `macos-telemetry-esf-YYYY.MM.DD`
 
