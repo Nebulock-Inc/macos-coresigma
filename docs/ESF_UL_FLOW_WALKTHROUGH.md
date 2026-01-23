@@ -116,16 +116,19 @@ logsource:
     category: process_creation
 detection:
     selection:
-        event_type: 9
-        event_name: exec
-        Image|re:
-            - '.*/tmp/.*'
-            - '.*/var/tmp/.*'
+        Image|contains:
+            - '/tmp/'
+            - '/var/tmp/'
         CommandLine|contains:
             - 'curl'
             - 'wget'
     condition: selection
 ```
+
+**Note**: We use `|contains:` instead of `|re:` (regex) because:
+1. EQL backend has limited regex support
+2. `|contains:` is simpler and more performant
+3. For path matching, substring search is usually sufficient
 
 **Key Points**:
 - Uses common field names (`Image`, `CommandLine`) that match collector output
@@ -200,18 +203,14 @@ The pipeline adds conditions to the rule:
 ```python
 # Original rule detection:
 selection:
-    event_type: 9
-    event_name: exec
-    Image|re: ['.*/tmp/.*']
+    Image|contains: ['/tmp/']
     CommandLine|contains: ['curl']
 
-# After AddConditionTransformation:
+# After AddConditionTransformation (adds logsource conditions):
 selection:
-    event_type: 9              # ✅ Already present
-    event_name: exec            # ✅ Already present
-    Image|re: ['.*/tmp/.*']
+    Image|contains: ['/tmp/']
     CommandLine|contains: ['curl']
-    # Note: Conditions already in rule, so no duplication
+    # Pipeline adds: event.action: exec (from logsource: category: process_creation)
 ```
 
 **Step 3.2.3: Field Mapping Transformation**
