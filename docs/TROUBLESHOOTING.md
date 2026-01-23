@@ -8,16 +8,7 @@
 
 **Solution**:
 
-1. **Run the fix script**:
-   ```bash
-   ./scripts/fix_timestamp_mapping.sh
-   ```
-   This will:
-   - Delete existing indices with wrong mapping
-   - Verify index templates are configured correctly
-   - Let collectors recreate indices with correct mapping
-
-2. **Or manually fix**:
+1. **Delete indices with wrong mapping** (they will recreate correctly):
    ```bash
    # Delete today's index (it will recreate with correct mapping)
    curl -u elastic:changeme -X DELETE http://localhost:9200/macos-telemetry-ul-$(date +%Y.%m.%d)

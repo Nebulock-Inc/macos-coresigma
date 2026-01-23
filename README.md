@@ -96,7 +96,7 @@ macos-coresigma/
 │   └── ul_collector.py    # Unified Logging collector
 ├── rules/                  # Sigma detection rules
 │   ├── esf/               # 38 ESF-based rules
-│   └── ul/                # 12 UL-based rules
+│   └── ul/                # 19 UL-based rules
 ├── pipelines/             # Sigma pipeline configs (YAML)
 │   ├── macos_esf.yml     # ESF pipeline definition
 │   └── macos_ul.yml      # UL pipeline definition

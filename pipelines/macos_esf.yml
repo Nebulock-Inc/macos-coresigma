@@ -1,6 +1,7 @@
-# DEPRECATED: This YAML pipeline has been replaced by the Python pipeline
-# New pipeline location: /Users/ebrown/pysigma-pipeline-macos-esf/
-# This file is kept for reference only. Use the Python pipeline for new work.
+# DEPRECATED: This YAML pipeline has been replaced by the built-in pySigma Python pipeline.
+# Use: from sigma.pipelines.elasticsearch import ecs_macos_esf
+# Source: https://github.com/SigmaHQ/pySigma-backend-elasticsearch/blob/main/sigma/pipelines/elasticsearch/macos.py
+# This file is kept for reference only.
 #
 name: macos-esf
 priority: 100
