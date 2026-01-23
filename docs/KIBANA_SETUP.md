@@ -7,17 +7,15 @@ Kibana provides a web-based UI to visualize and explore your macOS telemetry dat
 ### Start Kibana
 
 ```bash
-./scripts/start_kibana.sh
+# Using docker-compose (recommended)
+./scripts/start_services.sh
 ```
 
-This script will:
-1. Check if Elasticsearch is running
-2. Start Kibana container
-3. Configure it to connect to your Elasticsearch instance
+This starts both Elasticsearch and Kibana via docker-compose.
 
 ### Manual Start
 
-If you prefer to start manually:
+If you prefer to start Kibana manually:
 
 ```bash
 docker run -d \
