@@ -488,19 +488,19 @@ def main():
     print("\nChecking field mappings...")
     keyword_fields = get_keyword_fields()
     
-    # Determine parent field - must be a keyword field for aggregations
-    # After collector fix, these fields should now be populated for exec/fork events
-    if "process.parent.executable.keyword" in keyword_fields:
-        parent_field = "process.parent.executable.keyword"
-    elif "process.parent.executable" in keyword_fields:
-        parent_field = "process.parent.executable"  # Already keyword type
-    elif "process.parent.name.keyword" in keyword_fields:
+    # Determine parent field - prefer process.parent.name.keyword for parent→child viz
+    # This matches the "Endpoint Security" dashboard format
+    if "process.parent.name.keyword" in keyword_fields:
         parent_field = "process.parent.name.keyword"
     elif "process.parent.name" in keyword_fields:
         parent_field = "process.parent.name"  # Already keyword type
-    else:
-        # Use process.parent.executable.keyword - collector now populates this
+    elif "process.parent.executable.keyword" in keyword_fields:
         parent_field = "process.parent.executable.keyword"
+    elif "process.parent.executable" in keyword_fields:
+        parent_field = "process.parent.executable"  # Already keyword type
+    else:
+        # Default fallback
+        parent_field = "process.parent.name.keyword"
         print("  ℹ️ Parent field not yet in index (restart collector and generate events)")
     print(f"  Parent process field: {parent_field}")
     print(f"  Available keyword fields: {len(keyword_fields)}")
@@ -555,11 +555,11 @@ def main():
         ("lens-comp-security", "Security Events", "lnsXY", create_bar_config("event.action.keyword", 15)),
         ("lens-comp-cmdlines", "Top Command Lines", "lnsDatatable", create_table_config(["process.command_line.keyword"], 20)),
         ("lens-comp-executables", "Top Executables", "lnsDatatable", create_table_config(["process.executable.keyword"], 20)),
-        ("lens-comp-parent-child", "Parent → Child", "lnsDatatable", create_table_config([parent_field, "process.executable.keyword"], 15)),
+        ("lens-comp-parent-child", "Top Parent→Child Process Names", "lnsDatatable", create_table_config([parent_field, "process.name.keyword"], 15)),
         ("lens-comp-rare-exec", "Rare Executables", "lnsDatatable", create_table_config(["process.executable.keyword"], 30, ascending=True)),
         ("lens-comp-rare-proc", "Rare Processes", "lnsDatatable", create_table_config(["process.name.keyword"], 30, ascending=True)),
         ("lens-comp-rare-cmd", "Rare Commands", "lnsDatatable", create_table_config(["process.command_line.keyword"], 30, ascending=True)),
-        ("lens-comp-rare-parent", "Rare Parent→Child", "lnsDatatable", create_table_config([parent_field, "process.executable.keyword"], 20, ascending=True)),
+        ("lens-comp-rare-parent", "Rare Parent→Child Process Names", "lnsDatatable", create_table_config([parent_field, "process.name.keyword"], 20, ascending=True)),
         ("lens-comp-files", "File Operations", "lnsXY", create_bar_config("file.path.keyword", 15)),
     ]
     
@@ -607,9 +607,9 @@ def main():
     comp_vis_ids = [v[0] for v in comp_vis]
     
     comp_dashboard = create_dashboard_saved_object(
-        "macos-comprehensive-security-dashboard",
-        "macOS Comprehensive Security Dashboard",
-        "Full security analysis with Lens visualizations",
+        "macos-endpoint-security-dashboard",
+        "macOS Endpoint Security (ESF) Telemetry Overview",
+        "Comprehensive security telemetry from macOS Endpoint Security Framework using Lens visualizations",
         comp_panels,
         comp_vis_ids
     )
