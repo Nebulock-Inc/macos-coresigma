@@ -2,7 +2,7 @@
 
 **macOS CoreSigma** is a comprehensive Sigma-based detection framework for macOS Endpoint Security Framework (ESF) and Unified Logging (UL) telemetry. It enables security teams to leverage the Sigma rule format for advanced macOS threat detection and hunting.
 
-## 🎯 Overview
+## Overview
 
 CoreSigma provides:
 
@@ -12,12 +12,12 @@ CoreSigma provides:
 - **Kibana Dashboards** - Pre-built security dashboards for real-time monitoring
 - **pySigma Integration** - Compatible with the `ecs_macos_esf` pipeline in `pySigma-backend-elasticsearch`
 
-## 🔗 Related Projects
+## Related Projects
 
 - **[pySigma-backend-elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch)** - The pySigma backend with `ecs_macos_esf` pipeline (PR #171)
 - **[sigma-specification](https://github.com/SigmaHQ/sigma-specification)** - Sigma taxonomy with macOS ESF logsource (PR #25)
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -87,7 +87,7 @@ Credentials are automatically loaded from (in priority order):
 ./scripts/setup_credentials.sh --test
 ```
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 macos-coresigma/
@@ -125,7 +125,7 @@ macos-coresigma/
 - **Defense Evasion**: TCC database modification, code signature invalidation
 - **Lateral Movement**: Screen sharing sessions, SSH connections
 
-## 🔧 Field Mappings
+## Field Mappings
 
 CoreSigma maps Sigma taxonomy fields to ECS fields:
 
@@ -141,7 +141,7 @@ CoreSigma maps Sigma taxonomy fields to ECS fields:
 
 See [FIELD_NAME_ORIGINS.md](docs/FIELD_NAME_ORIGINS.md) for complete mappings.
 
-## 📊 Intelligent Filtering
+## Intelligent Filtering
 
 The ESF collector implements intelligent filtering to reduce noise:
 
@@ -157,7 +157,7 @@ The ESF collector implements intelligent filtering to reduce noise:
 
 See [FILTERING_CONFIGURATION.md](docs/FILTERING_CONFIGURATION.md) for details.
 
-## 🧪 Converting Sigma Rules
+## Converting Sigma Rules
 
 Using the pySigma backend with the `ecs_macos_esf` pipeline:
 
@@ -172,7 +172,7 @@ sigma convert -t elasticsearch -p ecs_macos_esf rules/esf/process_execution_susp
 sigma convert -t elasticsearch -f eql -p ecs_macos_esf rules/esf/macos_tcc_database_modification.yml
 ```
 
-## 🐳 Docker Deployment
+## Docker Deployment
 
 ```bash
 # Start Elasticsearch and Kibana
@@ -198,7 +198,7 @@ python3 scripts/create_lens_dashboards_ndjson.py
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [pySigma Sync Tracking](docs/PYSIGMA_SYNC_TRACKING.md)
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
@@ -210,17 +210,17 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 4. Test with `sigma convert -p ecs_macos_esf`
 5. Submit a PR
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [SigmaHQ](https://github.com/SigmaHQ) - Sigma specification and pySigma
 - [Elastic](https://www.elastic.co/) - ECS specification
 - [Apple](https://developer.apple.com/documentation/endpointsecurity) - Endpoint Security Framework
 
-## 📧 Contact
+## Contact
 
 - **Organization**: [Nebulock Inc.](https://github.com/Nebulock-Inc)
 - **Issues**: [GitHub Issues](https://github.com/Nebulock-Inc/macos-coresigma/issues)
