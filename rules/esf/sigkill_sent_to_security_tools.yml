@@ -19,15 +19,15 @@ detection:
     esf.event_type: 27
     event.action: signal
     SignalNumber: 9
-    TargetImage|endswith:
+    TargetImage|contains:
     - LittleSnitch
     - BlockBlock
     - KnockKnock
     - OverSight
     - ReiKey
     - Santa
-    - xprotectd
-    - MRT
+    - /xprotectd
+    - /MRT
     - CrowdStrike
     - SentinelOne
   condition: selection
