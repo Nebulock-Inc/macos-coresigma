@@ -97,9 +97,6 @@ macos-coresigma/
 ├── rules/                  # Sigma detection rules
 │   ├── esf/               # 38 ESF-based rules
 │   └── ul/                # 19 UL-based rules
-├── pipelines/             # Sigma pipeline configs (YAML)
-│   ├── macos_esf.yml     # ESF pipeline definition
-│   └── macos_ul.yml      # UL pipeline definition
 ├── exports/               # Kibana dashboard exports
 ├── scripts/               # Utility scripts
 ├── tests/                 # Test suite
