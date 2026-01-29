@@ -1,0 +1,31 @@
+title: Kernel Extension Loaded from Temporary Directory
+id: a65d0810-117a-487e-9ea3-50d754277d6e
+status: experimental
+description: Detects kernel extensions loaded from temporary directories which is
+  highly suspicious and may indicate malware
+references:
+- https://attack.mitre.org/techniques/T1547/006/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.persistence
+- attack.t1547.006
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: kernel_extension
+detection:
+  selection:
+    esf.event_type: 17
+    event.action: kextload
+    KextPath|contains:
+    - /tmp/
+    - /var/tmp/
+    - /private/tmp/
+    - /private/var/tmp/
+    - /dev/shm/
+  condition: selection
+falsepositives:
+- Very rare legitimate use cases
+level: critical
+modified: 2025/01/15

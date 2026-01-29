@@ -1,0 +1,28 @@
+title: Firewall Disabled
+id: 29e86bb3-3940-42e7-8da9-0ea4d47f20df
+status: experimental
+description: Detects disabling of the macOS firewall which exposes the system to network
+  attacks
+references:
+- https://attack.mitre.org/techniques/T1562/004/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.defense_evasion
+- attack.t1562.004
+logsource:
+  product: macos
+  service: unifiedlog
+  category: firewall_events
+detection:
+  selection:
+    subsystem: com.apple.alf
+    message|contains:
+    - firewall disabled
+    - firewall stopped
+    - global state disabled
+  condition: selection
+falsepositives:
+- Network troubleshooting
+level: high
+modified: 2025/01/15

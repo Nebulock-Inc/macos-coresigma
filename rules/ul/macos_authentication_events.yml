@@ -1,0 +1,45 @@
+title: macOS Authentication Events
+id: 3697a253-44ea-4276-b805-f07935c82538
+status: experimental
+description: 'Detects authentication-related events from the macOS authorization subsystem.
+
+  Monitors for login attempts, credential validation, and authorization requests
+
+  which may indicate initial access attempts or compromised credentials.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1078/
+- https://developer.apple.com/documentation/os/logging
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.authorization
+  selection_keywords:
+    message|contains:
+    - authentication
+    - login
+    - credential
+    - authorize
+  condition: selection_subsystem and selection_keywords
+falsepositives:
+- Normal user authentication and login activity
+- System services performing authorized operations
+- Legitimate administrative tasks
+fields:
+- subsystem
+- category
+- process
+- message
+- level
+tags:
+- attack.initial_access
+- attack.t1078
+- attack.credential_access
+- attack.t1555
+level: low

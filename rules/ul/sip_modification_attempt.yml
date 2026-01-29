@@ -1,0 +1,42 @@
+title: macOS System Integrity Protection Modification Attempt
+id: a7b8c9d0-e1f2-4345-0123-456789012345
+status: experimental
+description: |
+  Detects attempts to modify or bypass System Integrity Protection (SIP),
+  which protects critical system files and processes. Disabling SIP is a
+  common step in rootkit installation and advanced malware attacks.
+references:
+  - https://attack.mitre.org/techniques/T1562/001/
+  - https://support.apple.com/en-us/HT204899
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/22
+modified: 2025/01/22
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.syspolicy
+  selection_sip:
+    message|contains:
+      - 'System Integrity Protection'
+      - 'SIP'
+      - 'csrutil'
+      - 'rootless'
+      - 'protected'
+  selection_modification:
+    message|contains:
+      - 'disable'
+      - 'disabled'
+      - 'bypass'
+      - 'violation'
+      - 'denied'
+      - 'blocked'
+  condition: selection_subsystem and selection_sip and selection_modification
+falsepositives:
+  - Security researchers in controlled environments
+  - System administrators performing legitimate tasks
+level: critical
+tags:
+  - attack.defense_evasion
+  - attack.t1562.001

@@ -1,0 +1,44 @@
+title: macOS Suspicious Keychain Access
+id: d4e5f6a7-b8c9-4012-def0-123456789012
+status: experimental
+description: |
+  Detects suspicious access to the macOS Keychain, which stores passwords,
+  certificates, and encryption keys. Attackers may attempt to dump credentials
+  or access stored secrets.
+references:
+  - https://attack.mitre.org/techniques/T1555/001/
+  - https://www.sentinelone.com/blog/macos-keychain-extraction/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/22
+modified: 2025/01/22
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.securityd
+  selection_keychain:
+    message|contains:
+      - 'keychain'
+      - 'SecKeychainItemCopyContent'
+      - 'SecKeychainFindGenericPassword'
+      - 'SecKeychainFindInternetPassword'
+      - 'security find-generic-password'
+      - 'security find-internet-password'
+      - 'security dump-keychain'
+  selection_suspicious:
+    message|contains:
+      - 'denied'
+      - 'unauthorized'
+      - 'failed'
+      - 'dump'
+      - 'export'
+  condition: selection_subsystem and selection_keychain and selection_suspicious
+falsepositives:
+  - Legitimate password manager applications
+  - System services accessing credentials
+  - SSH key access
+level: high
+tags:
+  - attack.credential_access
+  - attack.t1555.001

@@ -1,0 +1,44 @@
+title: macOS Screen Sharing Session
+id: 1684f3e3-d701-477f-be1b-7169dba38f91
+status: experimental
+description: 'Detects screen sharing session attachment and detachment events. Screen
+  sharing
+
+  can be used for legitimate remote administration or by attackers for initial
+
+  access and lateral movement. Monitor for unexpected or unauthorized sessions.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1021/005/
+- https://attack.mitre.org/techniques/T1563/
+logsource:
+  product: macos
+  service: endpointsecurity
+detection:
+  selection_attach:
+    esf.event_type: 135
+    event.action: screensharing_attach
+  selection_detach:
+    esf.event_type: 136
+    event.action: screensharing_detach
+  condition: selection_attach or selection_detach
+falsepositives:
+- Legitimate IT support and remote administration
+- User-initiated screen sharing for collaboration
+- Automated management tools
+fields:
+- event_type
+- event_name
+- User
+- source_ip
+- session_id
+tags:
+- attack.initial_access
+- attack.t1021.005
+- attack.lateral_movement
+- attack.t1563
+level: medium

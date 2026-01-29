@@ -1,0 +1,38 @@
+title: SIGKILL Sent to Security Tools
+id: 3028231e-acae-4e0b-88a6-3044502c7478
+status: experimental
+description: Detects SIGKILL signals sent to security tools which may indicate defense
+  evasion
+references:
+- https://attack.mitre.org/techniques/T1562/001/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.defense_evasion
+- attack.t1562.001
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: process_signal
+detection:
+  selection:
+    esf.event_type: 27
+    event.action: signal
+    SignalNumber: 9
+    TargetImage|contains:
+    - LittleSnitch
+    - BlockBlock
+    - KnockKnock
+    - OverSight
+    - ReiKey
+    - Santa
+    - /xprotectd
+    - /MRT
+    - CrowdStrike
+    - SentinelOne
+  condition: selection
+falsepositives:
+- System updates
+- Legitimate process management
+level: high
+modified: 2025/01/15

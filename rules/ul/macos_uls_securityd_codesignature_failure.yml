@@ -1,0 +1,21 @@
+title: macOS ULS securityd CodeSignature Failure
+id: e1c4dc0e-3a75-4f58-8e8f-5d4a9f9a1b2c
+status: experimental
+description: Detect logs from securityd indicating code signature failures which might
+  reflect tampering.
+author: Eric Brown - Nebulock, Inc.
+date: 2025-10-29
+logsource:
+  product: macos
+  service: unifiedlog
+level: medium
+detection:
+  selection:
+    subsystem: com.apple.securityd
+    message|contains:
+    - code signature invalid
+    - rejecting
+  condition: selection
+falsepositives:
+- developer builds or ad-hoc signing
+modified: 2025/01/15

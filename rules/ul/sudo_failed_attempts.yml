@@ -1,0 +1,37 @@
+title: macOS Multiple Failed Sudo Attempts
+id: f6a7b8c9-d0e1-4234-f012-345678901234
+status: experimental
+description: |
+  Detects multiple failed sudo authentication attempts, which may indicate
+  password guessing, brute force attempts, or an attacker trying to escalate
+  privileges using compromised credentials.
+references:
+  - https://attack.mitre.org/techniques/T1548/003/
+  - https://attack.mitre.org/techniques/T1110/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/22
+modified: 2025/01/22
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.sudo
+  selection_failed:
+    message|contains:
+      - 'authentication failed'
+      - 'incorrect password attempt'
+      - '3 incorrect password attempts'
+      - 'NOT in sudoers'
+      - 'user NOT authorized'
+      - 'sorry, try again'
+  condition: selection_subsystem and selection_failed
+falsepositives:
+  - Users forgetting their password
+  - Mistyped passwords
+level: high
+tags:
+  - attack.privilege_escalation
+  - attack.t1548.003
+  - attack.credential_access
+  - attack.t1110

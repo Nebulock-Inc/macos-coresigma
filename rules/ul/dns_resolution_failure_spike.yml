@@ -1,0 +1,32 @@
+title: DNS Resolution Failure Spike
+id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e
+status: experimental
+description: Detects spike in DNS resolution failures which may indicate C2 infrastructure
+  takedown or DGA activity
+references:
+- https://attack.mitre.org/techniques/T1568/002/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.command_and_control
+- attack.t1568.002
+logsource:
+  product: macos
+  service: unifiedlog
+  category: network_events
+detection:
+  selection:
+    subsystem: com.apple.network
+    message|contains:
+    - DNS query failed
+    - resolution error
+    - NXDOMAIN
+  condition: selection
+  timeframe: 1m
+  # Note: Count aggregation (> 50 in 1m) would need to be applied
+  # at query time in Kibana/Elasticsearch, not in Sigma rule
+falsepositives:
+- Network connectivity issues
+- DNS server problems
+level: medium
+modified: 2025/01/15

@@ -1,0 +1,32 @@
+title: Mass Process Termination
+id: 8c803e5c-91b8-42f0-8557-f93308c263b9
+status: experimental
+description: Detects a single process terminating multiple other processes which may
+  indicate ransomware or system disruption
+references:
+- https://attack.mitre.org/techniques/T1489/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.impact
+- attack.t1489
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: process_signal
+detection:
+  selection:
+    esf.event_type: 27
+    event.action: signal
+    SignalNumber:
+    - 9
+    - 15
+  condition: selection
+  # Note: Count aggregation (count by process.pid > 10) would need to be applied
+  # at query time in Kibana/Elasticsearch, not in Sigma rule
+  timeframe: 1m
+falsepositives:
+- System shutdown scripts
+- Process management tools
+level: high
+modified: 2025/01/15

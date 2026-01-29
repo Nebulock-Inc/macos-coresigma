@@ -1,0 +1,32 @@
+title: macOS UL Unusual TCC Access Request
+id: c3d4e5f6-a7b8-9012-cdef-345678901234
+status: experimental
+description: Detects unusual TCC (Transparency, Consent, and Control) access requests that may indicate malicious behavior
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/15
+modified: 2025/01/15
+logsource:
+    product: macos
+    service: unifiedlog
+    category: tcc
+detection:
+    selection:
+        subsystem: com.apple.TCC
+        message|contains:
+            - 'Full Disk Access'
+            - 'Camera'
+            - 'Microphone'
+            - 'Screen Recording'
+        ProcessName|contains:
+            - '.dmg'
+            - '.pkg'
+            - '/tmp'
+            - '/var/tmp'
+    condition: selection
+falsepositives:
+    - Legitimate installer applications
+    - System configuration tools
+level: medium
+tags:
+    - attack.collection
+

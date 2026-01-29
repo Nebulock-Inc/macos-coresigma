@@ -1,0 +1,45 @@
+title: macOS File Transfer Tool Execution
+id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e
+status: experimental
+description: 'Detects execution of file transfer tools (scp, rsync, sftp) which may
+  indicate
+
+  lateral movement or data staging for exfiltration. Adversaries often use these
+
+  utilities to move files between compromised systems.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1021/004/
+- https://attack.mitre.org/techniques/T1570/
+logsource:
+  product: macos
+  service: endpointsecurity
+detection:
+  selection_event:
+    esf.event_type: 9
+    event.action: exec
+  selection_process:
+    Image|endswith:
+    - /scp
+    - /rsync
+    - /sftp
+  condition: selection_event and selection_process
+falsepositives:
+- Legitimate system administration and backup operations
+- Automated file synchronization tasks
+- Development workflows using rsync for deployments
+fields:
+- Image
+- CommandLine
+- ProcessId
+- ParentProcessId
+- User
+tags:
+- attack.lateral_movement
+- attack.t1021.004
+- attack.t1570
+level: medium

@@ -1,0 +1,82 @@
+# NOTE: Password is read from .env file (ELASTIC_PASSWORD variable)
+# Create .env with: ./scripts/setup_credentials.sh --sync-docker
+# Default password if .env not present: changeme
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -u elastic:$${ELASTIC_PASSWORD:-changeme} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  # Setup service - runs once to configure kibana_system user
+  setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: setup
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+    command: >
+      bash -c '
+        echo "Setting up kibana_system user password..."
+        until curl -s -u elastic:$${ELASTIC_PASSWORD} http://elasticsearch:9200/_cluster/health | grep -q "green\|yellow"; do
+          echo "Waiting for Elasticsearch..."
+          sleep 5
+        done
+        
+        # Set kibana_system password to same as elastic password
+        curl -s -X POST -u elastic:$${ELASTIC_PASSWORD} \
+          -H "Content-Type: application/json" \
+          http://elasticsearch:9200/_security/user/kibana_system/_password \
+          -d "{\"password\": \"$${ELASTIC_PASSWORD}\"}"
+        
+        echo ""
+        echo "Setup complete!"
+      '
+    restart: "no"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - SERVER_NAME=kibana
+      - SERVER_HOST=0.0.0.0
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY:-abcdefghijklmnopqrstuvwxyz123456}
+      - XPACK_SECURITY_ENCRYPTIONKEY=${KIBANA_SECURITY_KEY:-123456abcdefghijklmnopqrstuvwxyz}
+      - XPACK_REPORTING_ENCRYPTIONKEY=${KIBANA_REPORTING_KEY:-zyxwvutsrqponmlkjihgfedcba654321}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  es_data:
+    driver: local

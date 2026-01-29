@@ -1,0 +1,20 @@
+title: macOS ULS TCC Access Denied
+id: 5b6d7e8f-1a2b-4c3d-9e0f-1a2b3c4d5e6f
+status: experimental
+description: Detect tccd denials indicating apps denied access to protected categories.
+author: Eric Brown - Nebulock, Inc.
+date: 2025-10-29
+logsource:
+  product: macos
+  service: unifiedlog
+level: medium
+detection:
+  selection:
+    subsystem: com.apple.TCC
+    message|contains:
+    - Denied
+    - kTCCService
+  condition: selection
+falsepositives:
+- chatty apps requesting protected resources frequently
+modified: 2025/01/15

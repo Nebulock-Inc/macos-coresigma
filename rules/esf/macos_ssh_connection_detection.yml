@@ -1,0 +1,44 @@
+title: macOS SSH Connection Detection
+id: a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
+status: experimental
+description: 'Detects execution of SSH client or SSH daemon processes which may indicate
+
+  initial access attempts or remote connections. Monitor for unauthorized SSH
+
+  connections, especially from unexpected users or to sensitive systems.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1078/004/
+- https://attack.mitre.org/techniques/T1021/004/
+logsource:
+  product: macos
+  service: endpointsecurity
+detection:
+  selection_event:
+    esf.event_type: 9
+    event.action: exec
+  selection_process:
+    Image|endswith:
+    - /ssh
+    - /sshd
+  condition: selection_event and selection_process
+falsepositives:
+- Legitimate SSH usage by administrators
+- Automated scripts using SSH for remote management
+- CI/CD pipelines using SSH for deployments
+fields:
+- Image
+- CommandLine
+- ProcessId
+- ParentProcessId
+- User
+tags:
+- attack.initial_access
+- attack.t1078.004
+- attack.lateral_movement
+- attack.t1021.004
+level: medium

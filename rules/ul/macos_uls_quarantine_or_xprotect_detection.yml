@@ -1,0 +1,21 @@
+title: macOS ULS Quarantine or XProtect Detection
+id: 0a1b2c3d-4e5f-4789-abcd-ef0123456789
+status: experimental
+description: Detect logs referencing quarantine (LSQuarantine) or XProtect malware
+  detections.
+author: Eric Brown - Nebulock, Inc.
+date: 2025-10-29
+logsource:
+  product: macos
+  service: unifiedlog
+level: high
+detection:
+  selection:
+    message|contains:
+    - LSQuarantine
+    - XProtect
+    - Malware removed
+  condition: selection
+falsepositives:
+- rare, but test systems may trigger intentionally
+modified: 2025/01/15

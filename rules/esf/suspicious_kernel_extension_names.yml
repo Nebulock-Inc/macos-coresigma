@@ -1,0 +1,35 @@
+title: Suspicious Kernel Extension Names
+id: 8aa8d6c9-61fc-46ac-b83f-f055cb640186
+status: experimental
+description: Detects kernel extensions with suspicious or generic names often used
+  by rootkits and malware
+references:
+- https://attack.mitre.org/techniques/T1014/
+- https://www.sentinelone.com/labs/20-common-tools-techniques-used-by-macos-threat-actors-malware/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.defense_evasion
+- attack.t1014
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: kernel_extension
+detection:
+  selection:
+    esf.event_type: 17
+    event.action: kextload
+    KextIdentifier|contains:
+    - rootkit
+    - backdoor
+    - keylogger
+    - stealth
+    - hidden
+    - fake
+    - com.test.
+    - com.temp.
+  condition: selection
+falsepositives:
+- Development and testing kexts
+level: high
+modified: 2025/01/15

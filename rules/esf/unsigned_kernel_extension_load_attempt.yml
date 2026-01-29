@@ -1,0 +1,30 @@
+title: Unsigned Kernel Extension Load Attempt
+id: 7e7a1a47-45dd-4f97-8205-1d6aea67f682
+status: experimental
+description: Detects attempts to load unsigned kernel extensions which may indicate
+  rootkit installation or malicious kernel-level access
+references:
+- https://attack.mitre.org/techniques/T1547/006/
+- https://objective-see.com/blog/blog_0x4B.html
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.persistence
+- attack.privilege_escalation
+- attack.t1547.006
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: kernel_extension
+detection:
+  selection:
+    esf.event_type: 17
+    event.action: kextload
+  filter_signed:
+    TeamID: '*'
+  condition: selection and not filter_signed
+falsepositives:
+- Legitimate unsigned kexts in development environments
+- Testing scenarios
+level: critical
+modified: 2025/01/15

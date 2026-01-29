@@ -1,0 +1,42 @@
+title: macOS XPC Service Abuse
+id: e5f6a7b8-c9d0-4123-ef01-234567890123
+status: experimental
+description: |
+  Detects potential abuse of XPC (Inter-Process Communication) services.
+  XPC is used for secure communication between processes, but can be abused
+  for privilege escalation or accessing protected system services.
+references:
+  - https://attack.mitre.org/techniques/T1559/
+  - https://wojciechregula.blog/post/learn-xpc-exploitation-part-1/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/22
+modified: 2025/01/22
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.xpc
+  selection_sensitive_services:
+    message|contains:
+      - 'com.apple.security'
+      - 'com.apple.authd'
+      - 'com.apple.coreservices.launchservicesd'
+      - 'com.apple.TCC'
+      - 'com.apple.system.DirectoryService'
+  selection_indicators:
+    message|contains:
+      - 'connection rejected'
+      - 'denied'
+      - 'invalid entitlement'
+      - 'unauthorized'
+      - 'suspicious'
+  condition: selection_subsystem and selection_sensitive_services and selection_indicators
+falsepositives:
+  - Legitimate applications with missing entitlements
+  - Development/testing environments
+level: medium
+tags:
+  - attack.privilege_escalation
+  - attack.execution
+  - attack.t1559

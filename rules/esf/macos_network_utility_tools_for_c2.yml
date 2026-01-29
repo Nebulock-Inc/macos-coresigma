@@ -1,0 +1,46 @@
+title: macOS Network Utility Tools for C2
+id: b74398cf-4d87-4d2b-a7d2-3ffbe1c77d38
+status: experimental
+description: 'Detects execution of network utility tools (nc, netcat, socat) commonly
+  used
+
+  to establish command and control channels or reverse shells. These tools can
+
+  create arbitrary TCP/UDP connections for data transfer or remote command execution.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1071/
+- https://attack.mitre.org/techniques/T1059/
+logsource:
+  product: macos
+  service: endpointsecurity
+detection:
+  selection_event:
+    esf.event_type: 9
+    event.action: exec
+  selection_process:
+    Image|endswith:
+    - /nc
+    - /netcat
+    - /socat
+    - /ncat
+  condition: selection_event and selection_process
+falsepositives:
+- Network troubleshooting and testing by administrators
+- Development and testing of network applications
+- Security testing and penetration testing activities
+fields:
+- Image
+- CommandLine
+- ProcessId
+- ParentProcessId
+- User
+tags:
+- attack.command_and_control
+- attack.t1071
+- attack.t1059
+level: high

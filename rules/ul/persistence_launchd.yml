@@ -1,0 +1,45 @@
+title: macOS LaunchAgent/LaunchDaemon Persistence
+id: b2c3d4e5-f6a7-4890-bcde-f01234567890
+status: experimental
+description: |
+  Detects creation or modification of LaunchAgent or LaunchDaemon plist files,
+  which are commonly used for persistence on macOS. Attackers may create or modify
+  these to execute malicious code at login or system startup.
+references:
+  - https://attack.mitre.org/techniques/T1543/001/
+  - https://www.sentinelone.com/blog/how-malware-persists-on-macos/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/22
+modified: 2025/01/22
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.launchd
+  selection_persistence:
+    message|contains:
+      - 'LaunchAgent'
+      - 'LaunchDaemon'
+      - 'loaded'
+      - 'submitted'
+      - 'bootstrap'
+  selection_paths:
+    message|contains:
+      - '/Library/LaunchAgents'
+      - '/Library/LaunchDaemons'
+      - '~/Library/LaunchAgents'
+      - '/System/Library/LaunchAgents'
+      - '/System/Library/LaunchDaemons'
+  filter_system:
+    message|contains:
+      - 'com.apple.'
+  condition: selection_subsystem and (selection_persistence or selection_paths) and not filter_system
+falsepositives:
+  - Legitimate software installation
+  - System updates
+  - Enterprise management tools
+level: medium
+tags:
+  - attack.persistence
+  - attack.t1543.001

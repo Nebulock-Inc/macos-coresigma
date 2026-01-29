@@ -1,0 +1,31 @@
+title: XPC Connection from Unusual Location
+id: 4fdd0c51-2354-414b-b74d-45b634d0fcb4
+status: experimental
+description: Detects XPC service connections initiated from unusual file system locations
+references:
+- https://attack.mitre.org/techniques/T1559/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.execution
+- attack.t1559
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: xpc_connection
+detection:
+  selection:
+    esf.event_type: 65
+    event.action: xpc_connect
+    Image|startswith:
+    - /tmp/
+    - /var/tmp/
+    - /private/tmp/
+    - /Users/Shared/
+    - /dev/shm/
+  condition: selection
+falsepositives:
+- Installers running from temporary locations
+- User scripts
+level: medium
+modified: 2025/01/15

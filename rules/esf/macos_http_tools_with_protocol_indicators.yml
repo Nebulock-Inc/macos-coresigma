@@ -1,0 +1,50 @@
+title: macOS HTTP Tools with Protocol Indicators
+id: 77d4f6aa-6313-48b5-8575-c78c9e1b184f
+status: experimental
+description: 'Detects execution of HTTP/HTTPS tools (curl, wget) with protocol indicators
+
+  in command line, which may indicate command and control communication over
+
+  web protocols. Focus on automated or scripted usage patterns.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1071/001/
+- https://attack.mitre.org/techniques/T1105/
+logsource:
+  product: macos
+  service: endpointsecurity
+detection:
+  selection_event:
+    esf.event_type: 9
+    event.action: exec
+  selection_process:
+    Image|endswith:
+    - /curl
+    - /wget
+    - /fetch
+  selection_cmdline:
+    CommandLine|contains:
+    - http://
+    - https://
+    - ftp://
+  condition: selection_event and selection_process and selection_cmdline
+falsepositives:
+- Software updates and package management
+- Legitimate scripts downloading files
+- Development and CI/CD workflows
+- System administration tasks
+fields:
+- Image
+- CommandLine
+- ProcessId
+- ParentProcessId
+- User
+tags:
+- attack.command_and_control
+- attack.t1071.001
+- attack.t1105
+level: low

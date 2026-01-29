@@ -1,0 +1,46 @@
+title: macOS Network Share Access
+id: 7e7b928d-44fa-405e-a33d-29e6b09628f0
+status: experimental
+description: 'Detects mounting of network shares (SMB, AFP, NFS) which may indicate
+  lateral
+
+  movement attempts or access to shared resources on other systems. Adversaries
+
+  may mount network shares to access files or move laterally.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1021/002/
+- https://attack.mitre.org/techniques/T1039/
+logsource:
+  product: macos
+  service: endpointsecurity
+detection:
+  selection_event:
+    esf.event_type: 9
+    event.action: exec
+  selection_process:
+    Image|endswith:
+    - /mount
+    - /mount_smbfs
+    - /mount_afp
+    - /mount_nfs
+  condition: selection_event and selection_process
+falsepositives:
+- Legitimate network share access for file sharing
+- Automated backup systems accessing network storage
+- Enterprise applications using network file systems
+fields:
+- Image
+- CommandLine
+- ProcessId
+- ParentProcessId
+- User
+tags:
+- attack.lateral_movement
+- attack.t1021.002
+- attack.t1039
+level: medium

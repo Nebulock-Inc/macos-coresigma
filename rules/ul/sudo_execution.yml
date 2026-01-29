@@ -1,0 +1,27 @@
+title: macOS UL Sudo Command Execution
+id: d4e5f6a7-b8c9-0123-def4-456789012345
+status: experimental
+description: Detects sudo command execution which could indicate privilege escalation or unauthorized access
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/15
+modified: 2025/01/15
+logsource:
+    product: macos
+    service: unifiedlog
+    category: sudo
+detection:
+    selection:
+        subsystem: com.apple.sudo
+        message|contains:
+            - 'TTY='
+            - 'USER='
+        CommandLine|contains:
+            - 'sudo'
+    condition: selection
+falsepositives:
+    - Legitimate administrative tasks
+    - System maintenance operations
+level: low
+tags:
+    - attack.privilege_escalation
+

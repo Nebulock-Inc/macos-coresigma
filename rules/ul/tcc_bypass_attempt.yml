@@ -1,0 +1,44 @@
+title: macOS TCC Privacy Bypass Attempt
+id: a1b2c3d4-e5f6-4789-abcd-ef0123456789
+status: experimental
+description: |
+  Detects potential attempts to bypass macOS Transparency, Consent, and Control (TCC)
+  privacy protections. TCC protects sensitive resources like Camera, Microphone, 
+  Screen Recording, and Full Disk Access.
+references:
+  - https://attack.mitre.org/techniques/T1548/
+  - https://developer.apple.com/documentation/security/tcc
+  - https://objective-see.org/blog/blog_0x6C.html
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/22
+modified: 2025/01/22
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.TCC
+  selection_bypass_indicators:
+    message|contains:
+      - 'access denied'
+      - 'Denied'
+      - 'prompting for access'
+      - 'kTCCServiceSystemPolicyAllFiles'
+      - 'kTCCServiceScreenCapture'
+      - 'kTCCServiceMicrophone'
+      - 'kTCCServiceCamera'
+      - 'kTCCServiceAccessibility'
+      - 'kTCCServicePostEvent'
+  filter_normal_prompts:
+    message|contains:
+      - 'User approved'
+      - 'granted'
+  condition: selection_subsystem and selection_bypass_indicators and not filter_normal_prompts
+falsepositives:
+  - Legitimate applications requesting sensitive permissions
+  - First-time application launches requesting access
+level: high
+tags:
+  - attack.privilege_escalation
+  - attack.defense_evasion
+  - attack.t1548

@@ -1,0 +1,40 @@
+title: macOS MDM Profile Manipulation
+id: c3d4e5f6-a7b8-4901-cdef-012345678901
+status: experimental
+description: |
+  Detects manipulation of MDM (Mobile Device Management) configuration profiles.
+  Attackers may attempt to install malicious profiles or remove security profiles
+  to weaken system defenses.
+references:
+  - https://attack.mitre.org/techniques/T1484/
+  - https://support.apple.com/guide/deployment/intro-to-mdm-profiles-depc0aadd3fe/web
+author: Eric Brown - Nebulock, Inc.
+date: 2025/01/22
+modified: 2025/01/22
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.ManagedClient
+  selection_operations:
+    message|contains:
+      - 'profile'
+      - 'installed'
+      - 'removed'
+      - 'configuration'
+      - 'payload'
+  selection_suspicious:
+    message|contains:
+      - 'unsigned'
+      - 'untrusted'
+      - 'manual install'
+      - 'user install'
+  condition: selection_subsystem and selection_operations and selection_suspicious
+falsepositives:
+  - Legitimate MDM enrollment
+  - IT administrator profile deployment
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.t1484

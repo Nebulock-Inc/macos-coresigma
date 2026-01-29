@@ -1,0 +1,46 @@
+title: macOS Sudo Privilege Escalation Attempts
+id: 8f79e9a5-56d3-451d-9c2a-81d8cbe7be61
+status: experimental
+description: 'Detects sudo command execution and privilege escalation attempts from
+  the
+
+  com.apple.sudo subsystem. Monitors for both successful and failed sudo attempts
+
+  which may indicate privilege escalation activities or credential abuse.
+
+  '
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/31
+modified: 2025/10/31
+references:
+- https://attack.mitre.org/techniques/T1548/003/
+- https://attack.mitre.org/techniques/T1078/
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection_subsystem:
+    subsystem: com.apple.sudo
+  selection_keywords:
+    message|contains:
+    - COMMAND
+    - authentication
+    - sudo
+    - root
+  condition: selection_subsystem and selection_keywords
+falsepositives:
+- Legitimate administrative tasks
+- System maintenance operations
+- Software installations requiring elevated privileges
+- Authorized privileged user activities
+fields:
+- subsystem
+- category
+- process
+- message
+- level
+tags:
+- attack.privilege_escalation
+- attack.t1548.003
+- attack.t1078
+level: medium

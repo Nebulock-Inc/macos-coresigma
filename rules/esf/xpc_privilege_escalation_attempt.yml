@@ -1,0 +1,34 @@
+title: XPC Privilege Escalation Attempt
+id: 3d9194fd-230e-40ad-9610-6b15c0ba78c9
+status: experimental
+description: Detects XPC connections from low-privileged processes to high-privileged
+  services which may indicate privilege escalation
+references:
+- https://attack.mitre.org/techniques/T1068/
+- https://wojciechregula.blog/post/learn-xpc-exploitation-part-2-say-no-to-the-dump/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.privilege_escalation
+- attack.t1068
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: xpc_connection
+detection:
+  selection_event:
+    esf.event_type: 65
+    event.action: xpc_connect
+  selection_user:
+    UserId: 501-65535
+  selection_service:
+    XpcServiceName|contains:
+    - com.apple.xpc.privileged
+    - com.apple.security
+    - com.apple.admin
+  condition: selection_event and selection_user and selection_service
+falsepositives:
+- System utilities
+- Administrative tools
+level: medium
+modified: 2025/01/15

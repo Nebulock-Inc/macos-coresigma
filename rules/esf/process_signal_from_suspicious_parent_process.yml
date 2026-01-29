@@ -1,0 +1,34 @@
+title: Process Signal from Suspicious Parent Process
+id: f21b167a-1111-4b33-bff4-b1e4bd4459a8
+status: experimental
+description: Detects signals sent from processes that don't typically manage other
+  processes
+references:
+- https://attack.mitre.org/techniques/T1059/
+author: Eric Brown - Nebulock, Inc.
+date: 2025/10/29
+tags:
+- attack.execution
+- attack.t1059
+logsource:
+  product: macos
+  service: endpointsecurity
+  category: process_signal
+detection:
+  selection_signal:
+    esf.event_type: 27
+    event.action: signal
+  selection_suspicious:
+    Image|endswith:
+    - /curl
+    - /wget
+    - python
+    - ruby
+    - perl
+    - osascript
+  condition: selection_signal and selection_suspicious
+falsepositives:
+- Scripts and automation tools
+- Development activities
+level: medium
+modified: 2025/01/15
