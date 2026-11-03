@@ -9,7 +9,7 @@ references:
 author: Eric Brown - Nebulock, Inc.
 date: 2025/10/29
 tags:
-- attack.defense_evasion
+- attack.stealth
 - attack.t1014
 logsource:
   product: macos
@@ -32,4 +32,4 @@ detection:
 falsepositives:
 - Development and testing kexts
 level: high
-modified: 2025/01/15
+modified: 2026/11/03
