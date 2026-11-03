@@ -217,7 +217,7 @@ def get_mitre_mapping(sigma_rule) -> list:
     for tag in tags:
         tag_str = str(tag).lower()
         if tag_str.startswith("attack."):
-            part = tag_str.replace("attack.", "")
+            part = tag_str.replace("attack.", "").replace("-", "_")  # accept attack.defense-impairment style too
             
             # Tactic mapping
             tactic_map = {
@@ -227,7 +227,10 @@ def get_mitre_mapping(sigma_rule) -> list:
                 "execution": ("TA0002", "Execution"),
                 "persistence": ("TA0003", "Persistence"),
                 "privilege_escalation": ("TA0004", "Privilege Escalation"),
-                "defense_evasion": ("TA0005", "Defense Evasion"),
+                "stealth": ("TA0005", "Stealth"),
+                "defense_impairment": ("TA0112", "Defense Impairment"),
+                # Legacy pre-v19 tag. Defense Evasion was retired in ATT&CK v19; TA0005 is now Stealth.
+                "defense_evasion": ("TA0005", "Stealth"),
                 "credential_access": ("TA0006", "Credential Access"),
                 "discovery": ("TA0007", "Discovery"),
                 "lateral_movement": ("TA0008", "Lateral Movement"),
