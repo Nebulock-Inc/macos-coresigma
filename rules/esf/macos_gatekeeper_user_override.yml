@@ -13,7 +13,7 @@ description: 'Detects Gatekeeper user override events where users explicitly all
   '
 author: Eric Brown - Nebulock, Inc.
 date: 2025/10/31
-modified: 2025/10/31
+modified: 2026/11/03
 references:
 - https://attack.mitre.org/techniques/T1553/001/
 - https://attack.mitre.org/techniques/T1204/
@@ -36,7 +36,7 @@ fields:
 - file_path
 - application
 tags:
-- attack.defense_evasion
+- attack.defense_impairment
 - attack.t1553.001
 - attack.execution
 - attack.t1204

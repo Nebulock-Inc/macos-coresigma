@@ -10,7 +10,7 @@ references:
   - https://support.apple.com/guide/deployment/intro-to-mdm-profiles-depc0aadd3fe/web
 author: Eric Brown - Nebulock, Inc.
 date: 2025/01/22
-modified: 2025/01/22
+modified: 2026/11/03
 logsource:
   product: macos
   service: unifiedlog
@@ -36,5 +36,5 @@ falsepositives:
   - IT administrator profile deployment
 level: high
 tags:
-  - attack.defense_evasion
+  - attack.defense_impairment
   - attack.t1484

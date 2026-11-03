@@ -162,7 +162,7 @@ macos-coresigma/
 - **Process Execution**: Suspicious curl downloads, execution from temp directories
 - **Persistence**: LaunchAgent/Daemon creation, kernel extension loading
 - **Privilege Escalation**: setuid/setgid to root, sudo usage
-- **Defense Evasion**: TCC database modification, code signature invalidation
+- **Defense Impairment**: TCC database modification, code signature invalidation
 - **Lateral Movement**: Screen sharing sessions, SSH connections
 
 ## Field Mappings

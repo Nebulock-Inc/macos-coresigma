@@ -4,12 +4,12 @@ status: experimental
 description: Detects disabling of the macOS firewall which exposes the system to network
   attacks
 references:
-- https://attack.mitre.org/techniques/T1562/004/
+- https://attack.mitre.org/techniques/T1686/
 author: Eric Brown - Nebulock, Inc.
 date: 2025/10/29
 tags:
-- attack.defense_evasion
-- attack.t1562.004
+- attack.defense_impairment
+- attack.t1686
 logsource:
   product: macos
   service: unifiedlog
@@ -25,4 +25,4 @@ detection:
 falsepositives:
 - Network troubleshooting
 level: high
-modified: 2025/01/15
+modified: 2026/11/03

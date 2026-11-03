@@ -11,7 +11,7 @@ description: 'Detects code signature invalidation events which may indicate tamp
   '
 author: Eric Brown - Nebulock, Inc.
 date: 2025/10/31
-modified: 2025/10/31
+modified: 2026/11/03
 references:
 - https://attack.mitre.org/techniques/T1553/002/
 - https://attack.mitre.org/techniques/T1222/
@@ -34,7 +34,7 @@ fields:
 - Image
 - User
 tags:
-- attack.defense_evasion
+- attack.defense_impairment
 - attack.t1553.002
 - attack.t1222
 level: critical

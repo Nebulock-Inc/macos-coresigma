@@ -6,11 +6,11 @@ description: |
   which protects critical system files and processes. Disabling SIP is a
   common step in rootkit installation and advanced malware attacks.
 references:
-  - https://attack.mitre.org/techniques/T1562/001/
+  - https://attack.mitre.org/techniques/T1685/
   - https://support.apple.com/en-us/HT204899
 author: Eric Brown - Nebulock, Inc.
 date: 2025/01/22
-modified: 2025/01/22
+modified: 2026/11/03
 logsource:
   product: macos
   service: unifiedlog
@@ -38,5 +38,5 @@ falsepositives:
   - System administrators performing legitimate tasks
 level: critical
 tags:
-  - attack.defense_evasion
-  - attack.t1562.001
+  - attack.defense_impairment
+  - attack.t1685

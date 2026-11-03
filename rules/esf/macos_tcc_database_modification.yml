@@ -15,9 +15,9 @@ description: 'Detects modifications to the TCC (Transparency, Consent, and Contr
   '
 author: Eric Brown - Nebulock, Inc.
 date: 2025/10/31
-modified: 2025/10/31
+modified: 2026/11/03
 references:
-- https://attack.mitre.org/techniques/T1562/001/
+- https://attack.mitre.org/techniques/T1685/
 - https://attack.mitre.org/techniques/T1222/
 logsource:
   product: macos
@@ -41,7 +41,7 @@ fields:
 - service
 - client
 tags:
-- attack.defense_evasion
-- attack.t1562.001
+- attack.defense_impairment
+- attack.t1685
 - attack.t1222
 level: critical
