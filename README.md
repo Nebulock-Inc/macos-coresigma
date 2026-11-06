@@ -6,7 +6,7 @@
 
 CoreSigma provides:
 
-- **57 Detection Rules** - 38 ESF rules and 19 UL rules covering process execution, file events, authentication, privilege escalation, persistence, and more
+- **58 Detection Rules** - 39 ESF rules and 19 UL rules covering process execution, file events, authentication, privilege escalation, persistence, and more
 - **ECS-Compatible Data Collection** - Collectors that normalize ESF/UL events to Elastic Common Schema (ECS) format
 - **Intelligent Filtering** - Reduces log volume by ~98.5% while preserving 100% security-relevant events
 - **Kibana Dashboards** - Pre-built security dashboards for real-time monitoring
@@ -79,7 +79,7 @@ python3 collectors/ul_collector.py --output elasticsearch --daemon
 ### Deploying Detection Rules
 
 ```bash
-# Deploy all 57 Sigma rules to Kibana Detection Engine
+# Deploy all 58 Sigma rules to Kibana Detection Engine
 python3 scripts/deploy_sigma_rules.py
 
 # Deploy and enable rules
@@ -135,7 +135,7 @@ macos-coresigma/
 │   ├── esf_collector.py   # ESF event collector with ECS normalization
 │   └── ul_collector.py    # Unified Logging collector
 ├── rules/                  # Sigma detection rules
-│   ├── esf/               # 38 ESF-based rules
+│   ├── esf/               # 39 ESF-based rules
 │   └── ul/                # 19 UL-based rules
 ├── exports/               # Kibana dashboard exports
 ├── scripts/               # Utility scripts

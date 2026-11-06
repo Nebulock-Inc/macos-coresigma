@@ -447,7 +447,34 @@ class TestRealWorldRules:
         # Should map to ECS fields
         assert "process.executable" in query
         assert "process.command_line" in query
-    
+
+    def test_osascript_password_prompt_rule(self, backend):
+        """Test AMOS-style osascript hidden password prompt detection."""
+        rule = SigmaCollection.from_yaml("""
+            title: macOS ESF Osascript Hidden Password Prompt
+            status: experimental
+            logsource:
+                product: macos
+                service: endpointsecurity
+            detection:
+                selection_process:
+                    Image|endswith: /osascript
+                selection_cmd:
+                    CommandLine|contains|all:
+                        - display dialog
+                        - hidden answer
+                condition: selection_process and selection_cmd
+        """)
+
+        result = backend.convert(rule)
+        assert len(result) == 1
+        query = result[0]
+
+        # Should map to ECS fields
+        assert "process.executable" in query
+        assert "process.command_line" in query
+        assert "hidden" in query
+
     def test_persistence_via_launch_agent_rule(self, backend):
         """Test launch agent persistence detection."""
         rule = SigmaCollection.from_yaml("""
