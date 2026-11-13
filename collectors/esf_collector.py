@@ -218,9 +218,11 @@ class ESFCollector:
         
         elif event_name == "fork":
             process_path = raw.get("process", {}).get("executable", {}).get("path", "")
-            security_procs = ["bash", "sh", "zsh", "python", "perl", "ruby", "node",
-                            "curl", "wget", "nc", "ssh", "scp", "sudo", "su", "launchd"]
-            if any(p in process_path.lower() for p in security_procs):
+            security_procs = {"bash", "sh", "zsh", "python", "perl", "ruby", "node",
+                              "curl", "wget", "nc", "ssh", "scp", "sudo", "su", "launchd"}
+            # the forking process's own name, version suffix dropped (python3.12, perl5.34): a substring of the
+            # path would keep every fork under /usr/share ("sh") or from syncdefaultsd ("nc")
+            if os.path.basename(process_path).lower().rstrip("0123456789.") in security_procs:
                 self.filter_stats['fork']['kept'] += 1
                 return True
             should_keep = self._random.random() < 0.1

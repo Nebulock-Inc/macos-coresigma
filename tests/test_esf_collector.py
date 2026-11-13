@@ -218,6 +218,24 @@ def test_should_keep_event_by_name_and_path(collector):
     assert collector.should_keep_event(rename)
 
 
+@pytest.mark.parametrize("path,kept", [
+    ("/bin/zsh", True),
+    ("/usr/bin/python3.12", True),
+    ("/usr/bin/perl5.34", True),
+    ("/usr/local/bin/node", True),
+    ("/usr/share/tool/helper", False),  # "sh" in the path, not the name
+    ("/System/Library/CoreServices/Crash Reporter", False),  # "sh" inside the name
+    ("/usr/libexec/syncdefaultsd", False),  # "nc"
+    ("/Applications/Sublime Text.app/Contents/MacOS/sublime_text", False),  # "su"
+])
+def test_fork_sampling_keeps_by_process_name(path, kept):
+    c = ESFCollector()
+    c._random.random = lambda: 1.0  # never sampled in: only the name decides
+    raw = copy.deepcopy(by_key("fork")[0])
+    raw["process"]["executable"]["path"] = path
+    assert c.should_keep_event(raw) is kept
+
+
 @pytest.mark.parametrize("key,path,kept", [
     ("create", "/Users/user/Library/Application Support/Vendor/Frameworks/x.dylib", True),  # staging rule
     ("create", "/Applications/X.app/Contents/MacOS/icon.png", True),  # media-in-code rule
