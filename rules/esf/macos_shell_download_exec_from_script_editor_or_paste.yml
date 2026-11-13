@@ -1,0 +1,98 @@
+title: Shell Downloads and Runs a Script (ClickFix Pattern)
+id: 49b5037b-235d-4155-bace-2c5cc9272460
+name: terminal_or_scripteditor_download_exec
+status: experimental
+description: |
+  Base rule for the paste-to-stealer correlation, matching a ClickFix first step in any of three
+  forms: a shell, curl or osascript started by Script Editor; a shell given a whole pipeline with -c
+  that downloads or decodes a script and feeds it to an interpreter; or curl fetching an http(s) URL,
+  or base64 decoding, directly under zsh, bash or sh. A one-liner pasted into Terminal
+  (curl -fsSL https://... | bash, echo ... | base64 -D | bash) runs under the interactive shell,
+  which starts curl or base64 as its own child, so the third form is what sees it. Terminal itself
+  can't be checked: the taxonomy has no ancestor or responsible-process field, so that form also
+  matches curl or base64 run from any shell or script. It is broad on purpose: the rule only feeds
+  the correlation, which needs the rare credential-capture step within 15 minutes.
+references:
+  - https://www.microsoft.com/en-us/security/blog/2026/05/06/clickfix-campaign-uses-fake-macos-utilities-lures-deliver-infostealers
+  - https://www.jamf.com/blog/clickfix-macos-script-editor-atomic-stealer/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_script_editor:
+    ParentImage: '/System/Applications/Utilities/Script Editor.app/Contents/MacOS/Script Editor'
+    Image:
+      - /bin/sh
+      - /bin/bash
+      - /bin/zsh
+      - /bin/dash
+      - /usr/bin/curl
+      - /usr/bin/osascript
+  selection_shell:
+    Image:
+      - /bin/sh
+      - /bin/bash
+      - /bin/zsh
+      - /bin/dash
+    CommandLine|contains: ' -c '
+  selection_fetch:
+    CommandLine|contains:
+      - 'curl '
+      - 'wget '
+      - base64 -d
+      - base64 -D  # macOS spelling; listed for case-sensitive backends
+      - base64 --decode
+  selection_into_interpreter:
+    CommandLine|contains:
+      - '| sh '
+      - '|sh '
+      - '| bash '
+      - '|bash '
+      - '| zsh '
+      - '|zsh '
+      - '| osascript'
+      - '|osascript'
+      - '| python'
+      - '|python'
+      - '$(curl '
+      - '`curl '
+  selection_into_interpreter_at_end:
+    CommandLine|endswith:
+      - '| sh'
+      - '|sh'
+      - '| bash'
+      - '|bash'
+      - '| zsh'
+      - '|zsh'
+  selection_shell_parent:
+    ParentImage:
+      - /bin/zsh
+      - /bin/bash
+      - /bin/sh
+  selection_paste_curl:
+    Image|endswith: /curl
+    CommandLine|contains:
+      - 'http://'
+      - 'https://'
+  selection_paste_base64:
+    Image|endswith: /base64
+    CommandLine|contains:
+      - ' -d'
+      - ' -D'
+      - ' --decode'
+  condition: selection_script_editor or (selection_shell and selection_fetch and 1 of selection_into_interpreter*) or (selection_shell_parent and 1 of selection_paste_*)
+falsepositives:
+  - Install scripts run from Makefiles, CI or bootstrap scripts as sh -c "curl ... | sh"
+  - Any curl download or base64 decode typed in a shell or run by a shell script
+tags:
+  - attack.execution
+  - attack.t1204.004
+  - attack.t1059.004
+level: low
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - paste_to_stealer

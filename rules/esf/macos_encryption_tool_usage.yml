@@ -1,5 +1,5 @@
 title: macOS Encryption Tool Usage
-id: f2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c
+id: e7f60a2b-0f79-40d6-b951-d18c4b290906
 status: experimental
 description: 'Detects execution of encryption tools (openssl, gpg, diskutil) which
   may indicate
@@ -10,18 +10,15 @@ description: 'Detects execution of encryption tools (openssl, gpg, diskutil) whi
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1486/
 - https://attack.mitre.org/techniques/T1565/001/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /openssl
@@ -36,7 +33,7 @@ detection:
     - --cipher
     - apfs encryptVolume
     - coreStorage convert
-  condition: selection_event and selection_process and selection_encryption
+  condition: selection_process and selection_encryption
 falsepositives:
 - Legitimate data encryption for security
 - FileVault and disk encryption setup
@@ -53,3 +50,16 @@ tags:
 - attack.t1486
 - attack.t1565.001
 level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

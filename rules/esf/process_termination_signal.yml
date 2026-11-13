@@ -1,0 +1,32 @@
+title: Process Sent SIGKILL or SIGTERM
+id: 8c803e5c-91b8-42f0-8557-f93308c263b9
+name: macos_process_termination_signal
+status: experimental
+description: Base rule for the Mass Process Termination correlation (rules/correlation/mass_process_termination.yml).
+  Matches every SIGKILL (9) or SIGTERM (15) one process sends another; on its own it fires on each one.
+references:
+- https://attack.mitre.org/techniques/T1489/
+author: Eric Brown - Nebulock, Inc.
+date: 2025-10-29
+tags:
+- attack.impact
+- attack.t1489
+logsource:
+  product: macos
+  category: process_signal
+detection:
+  selection:
+    SignalNumber:
+    - 9
+    - 15
+  condition: selection
+falsepositives:
+- System shutdown scripts
+- Process management tools
+level: low
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - mass_process_termination

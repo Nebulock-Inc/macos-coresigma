@@ -1,0 +1,14 @@
+{
+  "_comment": "Local private strings for fixture scrubbing and privacy tests. Copy to private_strings.local.json and fill with real values.",
+  "hostnames": ["test-host-a"],
+  "aws_account_ids": ["111122223333", "444455556666"],
+  "instance_ids": ["i-0123456789abcdef0"],
+  "mac_serials": ["C02FAKESERIAL"],
+  "user_homes": ["/Users/ec2-user", "/Users/jdoe"],
+  "usernames": ["ec2-user", "jdoe"],
+  "personal_names": ["Jane"],
+  "credit_names": ["Jane Doe"],
+  "ip_addresses": ["10.11.12.13"],
+  "falcon_agent_uuids": ["00000000-1111-2222-3333-444444444444"],
+  "capture_bucket": "s3://example-bucket-111122223333/coresigma-test/captures/"
+}

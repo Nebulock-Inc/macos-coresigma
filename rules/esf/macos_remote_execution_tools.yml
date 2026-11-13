@@ -10,24 +10,21 @@ description: 'Detects execution of remote execution and terminal multiplexer too
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1021/
 - https://attack.mitre.org/techniques/T1563/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /screen
     - /tmux
     - /expect
-  condition: selection_event and selection_process
+  condition: selection_process
 falsepositives:
 - Legitimate use of terminal multiplexers by developers and administrators
 - Automated scripts using expect for interactive command execution
@@ -39,7 +36,20 @@ fields:
 - ParentProcessId
 - User
 tags:
-- attack.lateral_movement
+- attack.lateral-movement
 - attack.t1021
 - attack.t1563
 level: low
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

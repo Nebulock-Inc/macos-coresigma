@@ -1,0 +1,53 @@
+attack_technique: T1553.001
+display_name: Gatekeeper Bypass
+atomic_tests:
+  - name: Hands-on Window for Open Anyway on a Quarantined Ad-Hoc App (2026 macOS)
+    description: |
+      A recording window for a hands-on step: stages a minimal app whose executable only prints a line, ad-hoc signs it, gives it a com.apple.quarantine attribute and opens it, so Gatekeeper blocks it. While the window is open, a person clicks Open Anyway in System Settings > Privacy & Security.
+
+      Fidelity limits:
+      - The quarantine attribute is written with xattr, as a Safari download would carry it; the app was never downloaded
+      - The app lives under /tmp/cs_sim_gkapp and is deleted by cleanup; the approval is tied to that copy
+      - The approval is made by hand and needs the account's password
+      - The window lasts 6 minutes; run it with SIM_TIMEOUT=420 so run_sim.sh waits for it
+      - Other GUI activity can fall inside the window, so its sim_windows.json entry lists the one rule it counts for
+
+      Expected telemetry: an ESF gatekeeper_user_override event when the person approves the app.
+
+      Falcon block status: not blocked (2026-11-13 16:05Z run; macOS 26.7)
+
+      Prerequisite: Xcode Command Line Tools (`cc`).
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        D=/tmp/cs_sim_gkapp; A="$D/CoreSigmaSim.app"
+        rm -rf "$D" && mkdir -p "$A/Contents/MacOS"
+        printf '%s\n' '#include <stdio.h>' 'int main(void) { puts("cs_sim_gatekeeper_override"); return 0; }' > "$D/main.c"
+        cc -o "$A/Contents/MacOS/CoreSigmaSim" "$D/main.c"
+        printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+          '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+          '<plist version="1.0"><dict>' \
+          '<key>CFBundleExecutable</key><string>CoreSigmaSim</string>' \
+          '<key>CFBundleIdentifier</key><string>com.coresigma-sim.gkapp</string>' \
+          '<key>CFBundleName</key><string>CoreSigmaSim</string>' \
+          '<key>CFBundlePackageType</key><string>APPL</string>' \
+          '<key>CFBundleShortVersionString</key><string>1.0</string>' \
+          '</dict></plist>' > "$A/Contents/Info.plist"
+        codesign -s - -f "$A"
+        Q="0083;$(printf %x "$(date +%s)");Safari;"
+        find "$A" -exec xattr -w com.apple.quarantine "$Q" {} +
+        xattr -p com.apple.quarantine "$A" >/dev/null
+        open "$A" || true
+        echo "coreSigma hands-on window: Gatekeeper should have blocked CoreSigmaSim. Click Done, then"
+        echo "System Settings > Privacy & Security > Open Anyway. This window closes in 6 minutes."
+        for left in $(seq 360 -10 10); do printf '\r%3d s left ' "$left"; sleep 10; done
+        echo; echo "Gatekeeper window closed"
+      cleanup_command: |
+        pkill -x CoreSigmaSim >/dev/null 2>&1 || true
+        rm -rf /tmp/cs_sim_gkapp
+        echo "Cleanup complete"

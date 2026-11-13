@@ -1,0 +1,43 @@
+title: Osascript Hidden Answer Dialog
+id: d4f424f6-0b34-401b-b997-fe62dbcc50d8
+name: osascript_hidden_answer_dialog
+status: experimental
+description: |
+  Base rule for the Fake Password Prompt Then Keychain Activity correlation
+  (rules/correlation/hidden_prompt_keychain_activity.yml): osascript started with a display dialog that has
+  a hidden answer field ("hidden answer" in AppleScript, hiddenAnswer in JavaScript for Automation).
+  Same selection as macos_osascript_hidden_password_prompt.yml, which keeps its own standalone output; a
+  generate: false correlation suppresses the standalone output of its base rules. Its known misses are
+  listed there.
+references:
+  - https://attack.mitre.org/techniques/T1056/002/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+modified: 2026-11-12
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_process:
+    Image|endswith: /osascript
+  selection_signed:
+    SigningID: com.apple.osascript
+  selection_cmd:
+    CommandLine|contains:
+      - hidden answer
+      - hiddenAnswer
+  condition: (selection_process or selection_signed) and selection_cmd
+falsepositives:
+  - Admin or MDM scripts that prompt for the user's password via AppleScript
+  - A dialog that turns the hidden field off (without hidden answer, hiddenAnswer false)
+tags:
+  - attack.credential-access
+  - attack.t1056.002
+  - attack.execution
+  - attack.t1059.002
+level: medium
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - hidden_prompt_keychain_activity

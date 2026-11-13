@@ -1,26 +1,38 @@
 #!/bin/bash
-# Quick setup script for macOS Sigma Pipelines
+# Quick setup script for coreSigma
 
 set -euo pipefail
 
 echo "========================================="
-echo "macOS Sigma Pipelines Setup"
+echo "coreSigma Setup"
 echo "========================================="
 echo ""
 
-# Check Python version
-if ! command -v python3 &> /dev/null; then
-    echo "Error: Python 3 is required but not installed."
+# Find Python 3.10 to 3.14 (macOS's /usr/bin/python3 is 3.9; Homebrew's python3 may be 3.15, which
+# has no PyYAML wheel, and PyYAML built without libyaml breaks pySigma 1.5.1's import)
+PYTHON=""
+for p in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do  # newest first: ClickHouse needs 3.13+
+    if command -v "$p" &> /dev/null && "$p" -c 'import sys; sys.exit(not (3, 10) <= sys.version_info[:2] <= (3, 14))' 2> /dev/null; then
+        PYTHON="$p"
+        break
+    fi
+done
+if [ -z "$PYTHON" ]; then
+    echo "Error: the rule tooling needs Python 3.10 to 3.14 (pySigma 1.5.1); found $(python3 --version 2>&1 || echo none)."
+    echo "       Install one, e.g. brew install python@3.13. The collectors themselves run on the stock python3."
     exit 1
 fi
+PYTHON_VERSION=$("$PYTHON" --version | cut -d' ' -f2)
+echo "✓ Found Python $PYTHON_VERSION ($PYTHON)"
 
-PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-echo "✓ Found Python $PYTHON_VERSION"
-
-# Check for virtual environment
+# A venv from an older setup may be on a Python outside the range: rebuild it
+if [ -d "venv" ] && ! venv/bin/python -c 'import sys; sys.exit(not (3, 10) <= sys.version_info[:2] <= (3, 14))' 2> /dev/null; then
+    echo "Rebuilding venv: it was built with $(venv/bin/python --version 2>&1 || echo a missing Python), outside 3.10 to 3.14"
+    rm -rf venv
+fi
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
-    python3 -m venv venv
+    "$PYTHON" -m venv venv
 fi
 
 echo "Activating virtual environment..."
@@ -42,25 +54,19 @@ if pip show sigmatools &> /dev/null; then
     pip uninstall sigmatools -y
 fi
 
-# Setup Elasticsearch templates (if Elasticsearch is running)
+# Elasticsearch index templates, if Elasticsearch answers at all (a 401 too): the templates script finds the
+# credentials itself (ES_API_KEY, ES_USER/ES_PASSWORD or the Keychain), and its failure doesn't fail setup
 ES_URL="${ES_URL:-http://localhost:9200}"
-ES_USER="${ES_USER:-}"
-ES_PASSWORD="${ES_PASSWORD:-}"
-
-if [ -n "$ES_USER" ] && [ -n "$ES_PASSWORD" ]; then
-    CURL_AUTH="-u ${ES_USER}:${ES_PASSWORD}"
-else
-    CURL_AUTH=""
-fi
-
-if curl -s $CURL_AUTH "$ES_URL" > /dev/null 2>&1; then
+if curl -s -o /dev/null "$ES_URL"; then
     echo ""
     echo "Setting up Elasticsearch index templates..."
-    ES_USER="$ES_USER" ES_PASSWORD="$ES_PASSWORD" bash scripts/setup_elasticsearch_templates.sh
+    if ! bash scripts/setup_elasticsearch_templates.sh; then
+        echo "⚠️  Template setup failed (see above). Once credentials are set, run: bash scripts/setup_elasticsearch_templates.sh"
+    fi
 else
     echo ""
-    echo "⚠️  Elasticsearch not running or credentials incorrect - skipping template setup"
-    echo "   Run 'ES_USER=elastic ES_PASSWORD=changeme bash scripts/setup_elasticsearch_templates.sh' after starting Elasticsearch"
+    echo "⚠️  Elasticsearch not running at $ES_URL - skipping template setup"
+    echo "   Run 'ES_USER=elastic ES_PASSWORD=<ELASTIC_PASSWORD from .env> bash scripts/setup_elasticsearch_templates.sh' after starting Elasticsearch"
 fi
 
 echo ""
@@ -70,9 +76,9 @@ echo "========================================="
 echo ""
 echo "Next steps:"
 echo "1. Activate virtual environment: source venv/bin/activate"
-echo "2. Start Elasticsearch: docker-compose up -d (optional)"
-echo "3. Setup templates: bash scripts/setup_elasticsearch_templates.sh (if using Elasticsearch)"
-echo "4. Run tests: python3 tests/test_e2e.py"
+echo "2. Run tests: pytest -q"
+echo "3. Start Elasticsearch and Kibana in Docker, with the index templates: ./scripts/bench_up.sh elastic (optional)"
+echo "4. Credentials for the scripts: export ES_USER=elastic ES_PASSWORD=<ELASTIC_PASSWORD from .env>"
 echo "5. Read documentation: docs/INSTALLATION.md"
 echo ""
 

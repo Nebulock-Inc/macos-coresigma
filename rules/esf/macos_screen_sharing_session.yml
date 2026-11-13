@@ -10,35 +10,41 @@ description: 'Detects screen sharing session attachment and detachment events. S
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1021/005/
 - https://attack.mitre.org/techniques/T1563/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: screen_sharing
 detection:
-  selection_attach:
-    esf.event_type: 135
-    event.action: screensharing_attach
-  selection_detach:
-    esf.event_type: 136
-    event.action: screensharing_detach
-  condition: selection_attach or selection_detach
+  selection:
+    # every ESF event has an acting process: the category does the scoping
+    Image|startswith: /
+  condition: selection
 falsepositives:
 - Legitimate IT support and remote administration
 - User-initiated screen sharing for collaboration
 - Automated management tools
 fields:
-- event_type
-- event_name
 - User
-- source_ip
-- session_id
 tags:
-- attack.initial_access
+- attack.initial-access
 - attack.t1021.005
-- attack.lateral_movement
+- attack.lateral-movement
 - attack.t1563
 level: medium
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: silent
+      elastic-esql: silent
+      opensearch: silent
+      splunk: silent
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

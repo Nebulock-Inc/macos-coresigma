@@ -1,0 +1,12 @@
+title: Legitimate Curl Usage Filter
+id: fa45747d-586f-487c-a782-8920f04bc0e7
+logsource:
+  product: macos
+  category: process_creation
+filter:
+  rules:
+    - 77d4f6aa-6313-48b5-8575-c78c9e1b184f  # macOS HTTP Tools with Protocol Indicators
+  selection:
+    Image: '/usr/bin/curl'
+    ParentImage|startswith: '/usr/libexec/softwareupdate'
+  condition: not selection

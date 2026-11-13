@@ -1,0 +1,37 @@
+attack_technique: T1685
+display_name: "Disable or Modify Tools"
+atomic_tests:
+  - name: SIGKILL a Stand-in Process Named Like a Security Tool (2026 macOS)
+    description: |
+      Simulates killing a security tool: starts a compiled sleeper named BlockBlock and sends it SIGKILL.
+
+      Fidelity limits:
+      - The target is the simulation's own stub named after a tool that isn't installed; no real security tool is signalled
+
+      Expected telemetry: The stub's exec and an ESF signal event, signal 9, from bash to /private/tmp/cs_sim_sigkill/BlockBlock.
+
+      Falcon block status: not blocked (2026-11-12 21:59Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        D=/tmp/cs_sim_sigkill
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' '#include <unistd.h>' 'int main(void) { sleep(60); return 0; }' > "$D/sleeper.c"
+        cc -o "$D/BlockBlock" "$D/sleeper.c"
+        "$D/BlockBlock" & P=$!
+        sleep 1
+        kill -9 "$P"
+        wait "$P" || true
+        echo "SIGKILL step complete"
+      cleanup_command: |
+        set -e
+        pkill -9 -f /tmp/cs_sim_sigkill/BlockBlock >/dev/null 2>&1 || true
+        rm -rf /tmp/cs_sim_sigkill
+        echo "Cleanup complete"

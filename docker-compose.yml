@@ -4,7 +4,7 @@
 
 services:
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.25
     container_name: elasticsearch
     environment:
       - discovery.type=single-node
@@ -14,8 +14,7 @@ services:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "127.0.0.1:9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -26,7 +25,7 @@ services:
 
   # Setup service - runs once to configure kibana_system user
   setup:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.25
     container_name: setup
     depends_on:
       elasticsearch:
@@ -53,19 +52,19 @@ services:
     restart: "no"
 
   kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.0
+    image: docker.elastic.co/kibana/kibana:8.19.25
     container_name: kibana
     ports:
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - ELASTICSEARCH_USERNAME=kibana_system
       - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD:-changeme}
       - SERVER_NAME=kibana
       - SERVER_HOST=0.0.0.0
-      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY:-abcdefghijklmnopqrstuvwxyz123456}
-      - XPACK_SECURITY_ENCRYPTIONKEY=${KIBANA_SECURITY_KEY:-123456abcdefghijklmnopqrstuvwxyz}
-      - XPACK_REPORTING_ENCRYPTIONKEY=${KIBANA_REPORTING_KEY:-zyxwvutsrqponmlkjihgfedcba654321}
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_ENCRYPTION_KEY}
+      - XPACK_SECURITY_ENCRYPTIONKEY=${KIBANA_SECURITY_KEY}
+      - XPACK_REPORTING_ENCRYPTIONKEY=${KIBANA_REPORTING_KEY}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -77,6 +76,70 @@ services:
       timeout: 10s
       retries: 10
 
+  splunk:
+    image: splunk/splunk:9.4
+    container_name: splunk
+    platform: linux/amd64
+    profiles:
+      - splunk
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_LICENSE_URI=Free
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD:-changeme}
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - splunk_data:/opt/splunk/var
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/services/server/info || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    container_name: opensearch
+    profiles:
+      - opensearch
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "127.0.0.1:9201:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    container_name: clickhouse
+    profiles:
+      - clickhouse
+    environment:
+      # passwordless `default` from the host too (replay_capture.py, queries); the port is bound to 127.0.0.1 only
+      - CLICKHOUSE_SKIP_USER_SETUP=1
+    ports:
+      - "127.0.0.1:8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
 volumes:
   es_data:
+    driver: local
+  splunk_data:
+    driver: local
+  opensearch_data:
+    driver: local
+  clickhouse_data:
     driver: local

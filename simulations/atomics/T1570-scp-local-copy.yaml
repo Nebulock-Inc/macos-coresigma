@@ -1,0 +1,30 @@
+attack_technique: T1570
+display_name: "Lateral Tool Transfer"
+atomic_tests:
+  - name: Copy a Dummy File with scp (2026 macOS)
+    description: |
+      Simulates a file transfer tool run: scp copies a dummy file.
+
+      Fidelity limits:
+      - Both paths are local, so scp copies on the host (it runs cp); no SSH session is opened
+
+      Expected telemetry: /usr/bin/scp exec with both /tmp/cs_sim_scp paths.
+
+      Falcon block status: not blocked (2026-11-12 21:35Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_scp
+        rm -rf "$D" && mkdir -p "$D"
+        printf 'coresigma simulation dummy transfer\n' > "$D/src.txt"
+        /usr/bin/scp -q "$D/src.txt" "$D/dst.txt"
+        cmp "$D/src.txt" "$D/dst.txt"
+        echo "scp copy complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_scp
+        echo "Cleanup complete"

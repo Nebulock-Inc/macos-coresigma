@@ -1,0 +1,50 @@
+attack_technique: T1553.001
+display_name: Gatekeeper Bypass
+atomic_tests:
+  - name: Quarantine Strip, Ad-Hoc Signing, then a Partition-List Change (2026 macOS)
+    description: |
+      Simulates the MacSync staging sequence in order, as one user within seconds: removes the quarantine attribute from a dummy payload, ad-hoc signs it, then sets a partition list on an item in a throwaway keychain.
+
+      Fidelity limits:
+      - The payload is an inert shell script under /tmp/cs_sim_gkchain and is never run
+      - The keychain, its password and its item are throwaway dummies under /tmp/cs_sim_gkchain; the login keychain is never touched
+      - The user's keychain search list is recorded first and restored by cleanup
+      - One-second pauses keep the three steps in strict time order
+
+      Expected telemetry: three execs by the same user, in order: `xattr -d com.apple.quarantine`, `codesign -s - -f`, and `/usr/bin/security set-generic-password-partition-list`.
+
+      Falcon block status: not blocked (2026-11-13 14:51Z run; macOS 26.7)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_gkchain; KC="$D/cs-sim.keychain-db"; PW=coresigma-sim-dummy
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' '#!/bin/bash' 'echo "Benign test payload"' > "$D/payload"
+        chmod +x "$D/payload"
+        xattr -w com.apple.quarantine "0081;$(date +%s);Safari;" "$D/payload"
+        xattr -l "$D/payload" | grep -q com.apple.quarantine || exit 1
+        sleep 1
+        xattr -d com.apple.quarantine "$D/payload"
+        if xattr -l "$D/payload" | grep -q com.apple.quarantine; then exit 1; fi
+        sleep 1
+        codesign -s - -f "$D/payload"
+        codesign -dv "$D/payload" 2>&1 | grep -q "Signature=adhoc" || exit 1
+        sleep 1
+        /usr/bin/security list-keychains -d user > "$D/search_list.orig"
+        /usr/bin/security create-keychain -p "$PW" "$KC"
+        xargs /usr/bin/security list-keychains -d user -s < "$D/search_list.orig"
+        /usr/bin/security unlock-keychain -p "$PW" "$KC"
+        /usr/bin/security add-generic-password -a cs_sim -s cs_sim_partition_test -w coresigma-sim-dummy-item "$KC"
+        /usr/bin/security set-generic-password-partition-list -S apple-tool:,apple: -a cs_sim -s cs_sim_partition_test -k "$PW" "$KC" >/dev/null
+        echo "Staging chain complete"
+      cleanup_command: |
+        set -e
+        D=/tmp/cs_sim_gkchain
+        /usr/bin/security delete-keychain "$D/cs-sim.keychain-db" 2>/dev/null || true
+        if [ -s "$D/search_list.orig" ]; then xargs /usr/bin/security list-keychains -d user -s < "$D/search_list.orig"; fi
+        rm -rf "$D"
+        echo "Cleanup complete"

@@ -10,18 +10,15 @@ description: 'Detects execution of data compression tools (zip, tar, gzip) which
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1560/
 - https://attack.mitre.org/techniques/T1560/001/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /zip
@@ -31,7 +28,7 @@ detection:
     - /7z
     - /rar
     - /unrar
-  condition: selection_event and selection_process
+  condition: selection_process
 falsepositives:
 - Legitimate file compression for backups
 - Software installation and updates
@@ -48,3 +45,16 @@ tags:
 - attack.t1560
 - attack.t1560.001
 level: low
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

@@ -1,0 +1,401 @@
+[
+  {
+    "name": "Paste-to-Stealer Chain (2026 macOS)",
+    "start": "2026-11-11T03:14:56Z",
+    "end": "2026-11-11T03:17:13Z",
+    "status": "timeout"
+  },
+  {
+    "name": "Gatekeeper Quarantine Strip and Ad-Hoc Signing (2026 macOS)",
+    "start": "2026-11-11T03:21:28Z",
+    "end": "2026-11-11T03:21:43Z",
+    "status": "tainted"
+  },
+  {
+    "name": "Gatekeeper Quarantine Strip and Ad-Hoc Signing (2026 macOS)",
+    "start": "2026-11-11T03:26:50Z",
+    "end": "2026-11-11T03:27:04Z",
+    "status": "tainted"
+  },
+  {
+    "name": "npm Postinstall Hook Persistence (2026 macOS)",
+    "start": "2026-11-11T03:30:09Z",
+    "end": "2026-11-11T03:30:23Z",
+    "status": "error"
+  },
+  {
+    "name": "Paste-to-Stealer Chain (2026 macOS)",
+    "start": "2026-11-11T05:29:38Z",
+    "end": "2026-11-11T05:29:46.552Z",
+    "status": "success"
+  },
+  {
+    "name": "npm Postinstall Hook Persistence (2026 macOS)",
+    "start": "2026-11-11T05:42:15Z",
+    "end": "2026-11-11T05:42:19.091Z",
+    "status": "success"
+  },
+  {
+    "name": "Gatekeeper Quarantine Strip and Ad-Hoc Signing (2026 macOS)",
+    "start": "2026-11-11T06:06:17Z",
+    "end": "2026-11-11T06:06:21.142Z",
+    "status": "success"
+  },
+  {
+    "name": "idle",
+    "start": "2026-11-11T06:07:05Z",
+    "end": "2026-11-11T12:07:05Z",
+    "status": "complete"
+  },
+  {
+    "name": "npm Postinstall Hook Persistence (2026 macOS)",
+    "start": "2026-11-11T15:52:49Z",
+    "end": "2026-11-11T15:52:51Z",
+    "status": "retest"
+  },
+  {
+    "name": "npm Postinstall Hook Persistence (2026 macOS)",
+    "start": "2026-11-11T16:55:28Z",
+    "end": "2026-11-11T16:55:32.300Z",
+    "status": "success"
+  },
+  {
+    "name": "probe: benign osascript runs (correlation selectivity)",
+    "start": "2026-11-11T16:57:20Z",
+    "end": "2026-11-11T16:57:40Z",
+    "status": "probe"
+  },
+  {
+    "name": "Paste-to-Stealer Chain (2026 macOS)",
+    "start": "2026-11-11T18:58:19Z",
+    "end": "2026-11-11T18:58:27.569Z",
+    "status": "success"
+  },
+  {
+    "name": "probe: sudo, su, Open Directory and authentication events",
+    "start": "2026-11-11T21:00:20Z",
+    "end": "2026-11-11T21:00:30Z",
+    "status": "probe"
+  },
+  {
+    "name": "probe: collector start with sudo --preserve-env",
+    "start": "2026-11-11T21:09:40Z",
+    "end": "2026-11-11T21:10:12Z",
+    "status": "probe"
+  },
+  {
+    "name": "Paste-to-Stealer Chain (2026 macOS)",
+    "start": "2026-11-12T14:47:36Z",
+    "end": "2026-11-12T14:47:49.591Z",
+    "status": "success"
+  },
+  {
+    "name": "npm Postinstall Hook Persistence (2026 macOS)",
+    "start": "2026-11-12T14:50:51Z",
+    "end": "2026-11-12T14:51:11.245Z",
+    "status": "success"
+  },
+  {
+    "name": "Gatekeeper Quarantine Strip and Ad-Hoc Signing (2026 macOS)",
+    "start": "2026-11-12T14:57:02Z",
+    "end": "2026-11-12T14:59:27Z",
+    "status": "timeout"
+  },
+  {
+    "name": "SSH Key Login to Localhost (2026 macOS)",
+    "start": "2026-11-12T15:05:28Z",
+    "end": "2026-11-12T15:05:32.333Z",
+    "status": "success"
+  },
+  {
+    "name": "Writable and Executable Memory Request (2026 macOS)",
+    "start": "2026-11-12T15:09:39Z",
+    "end": "2026-11-12T15:09:47.449Z",
+    "status": "success"
+  },
+  {
+    "name": "idle",
+    "start": "2026-11-10T20:47:43Z",
+    "end": "2026-11-10T21:48:11Z",
+    "status": "complete"
+  },
+  {
+    "name": "idle",
+    "start": "2026-11-10T22:08:12Z",
+    "end": "2026-11-11T01:35:32Z",
+    "status": "complete"
+  },
+  {
+    "name": "idle",
+    "start": "2026-11-11T12:17:05Z",
+    "end": "2026-11-11T13:35:27Z",
+    "status": "complete"
+  },
+  {
+    "name": "idle",
+    "start": "2026-11-11T13:55:28Z",
+    "end": "2026-11-11T14:44:10Z",
+    "status": "complete"
+  },
+  {
+    "name": "idle",
+    "start": "2026-11-11T16:02:51Z",
+    "end": "2026-11-11T16:45:28Z",
+    "status": "complete"
+  },
+  {
+    "name": "Archive a Dummy Directory with zip and tar (2026 macOS)",
+    "start": "2026-11-12T21:25:17Z",
+    "end": "2026-11-12T21:25:21.500Z",
+    "status": "superseded"
+  },
+  {
+    "name": "Encrypt a Dummy File with openssl enc (2026 macOS)",
+    "start": "2026-11-12T21:27:31Z",
+    "end": "2026-11-12T21:28:49.702Z",
+    "status": "superseded"
+  },
+  {
+    "name": "DNS Lookup with dig (2026 macOS)",
+    "start": "2026-11-12T21:30:58Z",
+    "end": "2026-11-12T21:31:01.350Z",
+    "status": "superseded"
+  },
+  {
+    "name": "Netcat Port Check to Localhost (2026 macOS)",
+    "start": "2026-11-12T21:33:11Z",
+    "end": "2026-11-12T21:33:15.156Z",
+    "status": "superseded"
+  },
+  {
+    "name": "Copy a Dummy File with scp (2026 macOS)",
+    "start": "2026-11-12T21:35:25Z",
+    "end": "2026-11-12T21:35:29.113Z",
+    "status": "success"
+  },
+  {
+    "name": "Run a Command under expect or screen (2026 macOS)",
+    "start": "2026-11-12T21:37:39Z",
+    "end": "2026-11-12T21:37:42.428Z",
+    "status": "success"
+  },
+  {
+    "name": "Cloud Storage Copy Dry Run with the AWS CLI (2026 macOS)",
+    "start": "2026-11-12T21:39:52Z",
+    "end": "2026-11-12T21:39:56.509Z",
+    "status": "success"
+  },
+  {
+    "name": "Set a Partition List on a Throwaway Keychain (2026 macOS)",
+    "start": "2026-11-12T21:42:06Z",
+    "end": "2026-11-12T21:42:09.808Z",
+    "status": "success"
+  },
+  {
+    "name": "Create and Delete a Throwaway Local Account (2026 macOS)",
+    "start": "2026-11-12T21:44:18Z",
+    "end": "2026-11-12T21:46:28.855Z",
+    "status": "superseded"
+  },
+  {
+    "name": "Boot Out a Dummy Launch Job (2026 macOS)",
+    "start": "2026-11-12T21:48:40Z",
+    "end": "2026-11-12T21:48:45.653Z",
+    "status": "success"
+  },
+  {
+    "name": "SMB Mount Attempt to Localhost (2026 macOS)",
+    "start": "2026-11-12T21:50:53Z",
+    "end": "2026-11-12T21:50:56.824Z",
+    "status": "success"
+  },
+  {
+    "name": "Write an Image File into a Dummy App Bundle's Code Directory (2026 macOS)",
+    "start": "2026-11-12T21:53:07Z",
+    "end": "2026-11-12T21:53:10.668Z",
+    "status": "success"
+  },
+  {
+    "name": "XPC Connection from a Binary in /tmp (2026 macOS)",
+    "start": "2026-11-12T21:55:19Z",
+    "end": "2026-11-12T21:55:23.495Z",
+    "status": "success"
+  },
+  {
+    "name": "XPC Connection to a Dummy .test. Mach Service (2026 macOS)",
+    "start": "2026-11-12T21:57:33Z",
+    "end": "2026-11-12T21:57:39.786Z",
+    "status": "success"
+  },
+  {
+    "name": "SIGKILL a Stand-in Process Named Like a Security Tool (2026 macOS)",
+    "start": "2026-11-12T21:59:46Z",
+    "end": "2026-11-12T22:00:03.663Z",
+    "status": "superseded"
+  },
+  {
+    "name": "SIGTERM a Stand-in Process Named BackgroundTaskManagementAgent (2026 macOS)",
+    "start": "2026-11-12T22:02:10Z",
+    "end": "2026-11-12T22:02:14.049Z",
+    "status": "success"
+  },
+  {
+    "name": "Terminate Fifteen Dummy Processes from One Shell (2026 macOS)",
+    "start": "2026-11-12T22:04:22Z",
+    "end": "2026-11-12T22:04:26.311Z",
+    "status": "success"
+  },
+  {
+    "name": "Credential File Reads by a node Stand-in (2026 macOS)",
+    "start": "2026-11-12T22:06:36Z",
+    "end": "2026-11-12T22:06:39.773Z",
+    "status": "success"
+  },
+  {
+    "name": "Rejected sudo by a Throwaway Non-Sudoer (2026 macOS)",
+    "start": "2026-11-12T22:08:49Z",
+    "end": "2026-11-12T22:10:21.944Z",
+    "status": "superseded"
+  },
+  {
+    "name": "Admin Authorization Right Requested Without Interaction (2026 macOS)",
+    "start": "2026-11-12T22:12:28Z",
+    "end": "2026-11-12T22:12:32.112Z",
+    "status": "success"
+  },
+  {
+    "name": "Gatekeeper Assessment of an Unsigned Binary (2026 macOS)",
+    "start": "2026-11-12T22:14:42Z",
+    "end": "2026-11-12T22:14:45.989Z",
+    "status": "success"
+  },
+  {
+    "name": "Archive a Dummy Directory with zip and tar (2026 macOS)",
+    "start": "2026-11-12T23:34:11Z",
+    "end": "2026-11-12T23:34:14Z",
+    "status": "success"
+  },
+  {
+    "name": "Encrypt a Dummy File with openssl enc (2026 macOS)",
+    "start": "2026-11-12T23:36:24Z",
+    "end": "2026-11-12T23:36:28Z",
+    "status": "success"
+  },
+  {
+    "name": "DNS Lookup with dig (2026 macOS)",
+    "start": "2026-11-12T23:38:39Z",
+    "end": "2026-11-12T23:38:42Z",
+    "status": "success"
+  },
+  {
+    "name": "Netcat Port Check to Localhost (2026 macOS)",
+    "start": "2026-11-12T23:40:53Z",
+    "end": "2026-11-12T23:40:56Z",
+    "status": "success"
+  },
+  {
+    "name": "SIGKILL a Stand-in Process Named Like a Security Tool (2026 macOS)",
+    "start": "2026-11-12T23:43:06Z",
+    "end": "2026-11-12T23:43:10Z",
+    "status": "success"
+  },
+  {
+    "name": "Rejected sudo by a Throwaway Non-Sudoer (2026 macOS)",
+    "start": "2026-11-12T23:45:20Z",
+    "end": "2026-11-12T23:45:32Z",
+    "status": "success"
+  },
+  {
+    "name": "Create and Delete a Throwaway Local Account (2026 macOS)",
+    "start": "2026-11-12T23:47:44Z",
+    "end": "2026-11-12T23:47:47Z",
+    "status": "success"
+  },
+  {
+    "name": "Toggle the Application Firewall and Restore Its State (2026 macOS)",
+    "start": "2026-11-13T04:03:14Z",
+    "end": "2026-11-13T04:03:19.993Z",
+    "status": "success"
+  },
+  {
+    "name": "Refused csrutil disable Outside Recovery (2026 macOS)",
+    "start": "2026-11-13T04:05:28Z",
+    "end": "2026-11-13T04:05:31.710Z",
+    "status": "success"
+  },
+  {
+    "name": "Run a Copy of echo with a Broken Code Signature (2026 macOS)",
+    "start": "2026-11-13T04:07:41Z",
+    "end": "2026-11-13T04:07:44.904Z",
+    "status": "success"
+  },
+  {
+    "name": "Write and Delete a Dummy File in /private/etc (2026 macOS)",
+    "start": "2026-11-13T04:10:05Z",
+    "end": "2026-11-13T04:10:08.807Z",
+    "status": "success"
+  },
+  {
+    "name": "Quarantine Strip, Ad-Hoc Signing, then a Partition-List Change (2026 macOS)",
+    "start": "2026-11-13T14:51:46Z",
+    "end": "2026-11-13T14:51:54.473Z",
+    "status": "success"
+  },
+  {
+    "name": "SIGTERM from perl to a Dummy sleep (2026 macOS)",
+    "start": "2026-11-13T14:54:00Z",
+    "end": "2026-11-13T14:54:04.102Z",
+    "status": "success"
+  },
+  {
+    "name": "Failed Lookup and Wrong-Password Unlock on a Throwaway Keychain (2026 macOS)",
+    "start": "2026-11-13T14:56:14Z",
+    "end": "2026-11-13T14:56:17.515Z",
+    "status": "success"
+  },
+  {
+    "name": "Hands-on Window for a Screen Sharing Connection (2026 macOS)",
+    "start": "2026-11-13T15:20:47Z",
+    "end": "2026-11-13T15:24:50.284Z",
+    "status": "superseded",
+    "rules": [
+      "1684f3e3-d701-477f-be1b-7169dba38f91"
+    ]
+  },
+  {
+    "name": "Hands-on Window for a Screen Sharing Connection (2026 macOS)",
+    "start": "2026-11-13T15:50:25Z",
+    "end": "2026-11-13T15:54:29.071Z",
+    "status": "superseded",
+    "rules": [
+      "1684f3e3-d701-477f-be1b-7169dba38f91"
+    ]
+  },
+  {
+    "name": "Hands-on Window for a Screen Sharing Connection (2026 macOS)",
+    "start": "2026-11-13T15:55:27Z",
+    "end": "2026-11-13T15:59:30.368Z",
+    "status": "success",
+    "rules": [
+      "1684f3e3-d701-477f-be1b-7169dba38f91"
+    ]
+  },
+  {
+    "name": "Hands-on Window for Open Anyway on a Quarantined Ad-Hoc App (2026 macOS)",
+    "start": "2026-11-13T16:05:00Z",
+    "end": "2026-11-13T16:11:05.550Z",
+    "status": "success",
+    "rules": [
+      "61a63a62-a6c7-432c-af13-01a28270790e"
+    ]
+  },
+  {
+    "name": "Hands-on Window for do shell script in Script Editor (2026 macOS)",
+    "start": "2026-11-13T16:16:26Z",
+    "end": "2026-11-13T16:19:29.298Z",
+    "status": "success",
+    "rules": [
+      "f57b5d60-d671-443a-84fb-9c566cec599a"
+    ]
+  }
+]

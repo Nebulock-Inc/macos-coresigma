@@ -6,18 +6,14 @@ description: Detects signals sent from processes that don't typically manage oth
 references:
 - https://attack.mitre.org/techniques/T1059/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/29
+date: 2025-10-29
 tags:
 - attack.execution
 - attack.t1059
 logsource:
   product: macos
-  service: endpointsecurity
   category: process_signal
 detection:
-  selection_signal:
-    esf.event_type: 27
-    event.action: signal
   selection_suspicious:
     Image|endswith:
     - /curl
@@ -26,9 +22,22 @@ detection:
     - ruby
     - perl
     - osascript
-  condition: selection_signal and selection_suspicious
+  condition: selection_suspicious
 falsepositives:
 - Scripts and automation tools
 - Development activities
 level: medium
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

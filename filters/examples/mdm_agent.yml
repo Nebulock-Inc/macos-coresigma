@@ -1,0 +1,11 @@
+title: Jamf MDM Agent Filter
+id: 0358a4c5-ba54-4cc6-9886-bf537e892fbe
+logsource:
+  product: macos
+  category: process_creation
+filter:
+  rules:
+    - e7f60a2b-0f79-40d6-b951-d18c4b290906  # macOS Encryption Tool Usage
+  selection:
+    ParentImage: '/usr/local/jamf/bin/jamf'
+  condition: not selection

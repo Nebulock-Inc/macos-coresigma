@@ -1,0 +1,44 @@
+title: Ad-hoc Code Signing with codesign
+id: a91427f2-b31d-499c-9863-266ef5d2f913
+name: adhoc_codesign
+status: experimental
+description: |
+  Detects codesign signing with the ad-hoc identity "-" (codesign -s -, --sign -), which gives a
+  modified or unsigned bundle a signature that Apple silicon will run without a developer
+  certificate. MacSync and other 2026 droppers re-sign a payload this way after removing its
+  quarantine attribute. Xcode ("Sign to Run Locally") and Homebrew do the same for local builds, so
+  the rule is noisy on its own. Base rule for the Gatekeeper-evasion staging correlation; with that
+  correlation's generate: false it is not converted as a standalone query.
+references:
+  - https://attack.mitre.org/techniques/T1553/002/
+  - https://securelist.com/macsync-new-version/121383
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_codesign_path:
+    Image: /usr/bin/codesign
+  selection_codesign_signed:
+    SigningID: com.apple.security.codesign
+  selection_adhoc_short:
+    CommandLine|re: '.* -[a-zA-Z]*s - .*'
+  selection_adhoc_long:
+    CommandLine|contains:
+      - ' --sign - '
+      - ' --sign=- '
+  condition: 1 of selection_codesign_* and 1 of selection_adhoc_*
+falsepositives:
+  - Xcode builds signed to run locally
+  - Homebrew re-signing bottles and casks on Apple silicon
+  - Developers re-signing a patched or locally built app
+tags:
+  - attack.defense-impairment
+  - attack.t1553.002
+level: low
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - gatekeeper_evasion_staging

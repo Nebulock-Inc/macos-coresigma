@@ -1,0 +1,52 @@
+title: Ditto Zips Data in a Temporary Directory
+id: 39a44abd-e382-44e6-a3bc-1293aff9c11d
+status: experimental
+description: |
+  Detects ditto creating a zip archive (-c -k) from or into a temporary directory. AMOS, Odyssey
+  and MacSync copy browser, keychain and wallet files into a temp folder and zip it with ditto before
+  uploading it with curl; ditto, not zip or tar, is what these stealers use.
+references:
+  - https://unit42.paloaltonetworks.com/atomic-macos-amos-stealer-activity
+  - https://attack.mitre.org/techniques/T1560/001/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_ditto_path:
+    Image: /usr/bin/ditto
+  selection_ditto_signed:
+    SigningID: com.apple.ditto
+  # -c and -k as separate or combined flags (-ck, -kc); --keepParent and the like don't count
+  selection_archive_create:
+    CommandLine|re: '.* -[a-zA-Z]*c[a-zA-Z]* .*'
+  selection_archive_zip:
+    CommandLine|re: '.* -[a-zA-Z]*k[a-zA-Z]* .*'
+  selection_temp:
+    CommandLine|contains:
+      - ' /tmp/'
+      - ' /private/tmp/'
+      - ' /var/folders/'
+      - ' /private/var/folders/'
+  condition: 1 of selection_ditto_* and all of selection_archive_* and selection_temp
+falsepositives:
+  - Install, update or log-collection scripts that zip files in /tmp
+tags:
+  - attack.collection
+  - attack.t1560.001
+  - attack.t1074.001
+level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

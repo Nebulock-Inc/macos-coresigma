@@ -1,0 +1,34 @@
+attack_technique: T1489
+display_name: "Service Stop"
+atomic_tests:
+  - name: Boot Out a Dummy Launch Job (2026 macOS)
+    description: |
+      Simulates stopping a service with launchctl: loads a dummy agent (label com.coresigma-sim.svc, running /bin/sleep) into the user's GUI domain from a plist in /tmp, then boots it out.
+
+      Fidelity limits:
+      - The job is the simulation's own dummy; no real service is stopped
+      - The plist lives in /tmp/cs_sim_svc, not a LaunchAgents directory, so nothing persists
+
+      Expected telemetry: /bin/launchctl execs: bootstrap, then `bootout gui/<uid>/com.coresigma-sim.svc` by the user (not root).
+
+      Falcon block status: not blocked (2026-11-12 21:48Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_svc; L=com.coresigma-sim.svc; P="$D/$L.plist"
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0"><dict>' "<key>Label</key><string>$L</string>" '<key>ProgramArguments</key><array><string>/bin/sleep</string><string>300</string></array>' '<key>RunAtLoad</key><true/>' '</dict></plist>' > "$P"
+        plutil -lint "$P"
+        /bin/launchctl bootstrap "gui/$(id -u)" "$P"
+        sleep 2
+        /bin/launchctl bootout "gui/$(id -u)/$L"
+        echo "Launch job boot-out complete"
+      cleanup_command: |
+        L=com.coresigma-sim.svc
+        /bin/launchctl bootout "gui/$(id -u)/$L" >/dev/null 2>&1 || true
+        rm -rf /tmp/cs_sim_svc
+        echo "Cleanup complete"

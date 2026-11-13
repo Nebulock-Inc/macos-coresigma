@@ -1,0 +1,31 @@
+attack_technique: T1021.002
+display_name: "Remote Services: SMB/Windows Admin Shares"
+atomic_tests:
+  - name: SMB Mount Attempt to Localhost (2026 macOS)
+    description: |
+      Simulates network share access: mount_smbfs tries to mount a guest share from localhost.
+
+      Fidelity limits:
+      - The target is 127.0.0.1 and the share doesn't exist, so the mount fails; nothing is mounted
+      - -N: no password prompt
+
+      Expected telemetry: /sbin/mount_smbfs exec with //guest@127.0.0.1/cs_sim_share.
+
+      Falcon block status: not blocked (2026-11-12 21:50Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_smb
+        rm -rf "$D" && mkdir -p "$D/mnt"
+        /sbin/mount_smbfs -N //guest@127.0.0.1/cs_sim_share "$D/mnt" || true
+        echo "SMB mount attempt complete"
+      cleanup_command: |
+        set -e
+        D=/tmp/cs_sim_smb
+        /sbin/umount "$D/mnt" >/dev/null 2>&1 || true
+        rm -rf "$D"
+        echo "Cleanup complete"

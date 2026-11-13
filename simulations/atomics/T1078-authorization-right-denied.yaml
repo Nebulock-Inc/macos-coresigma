@@ -1,0 +1,24 @@
+attack_technique: T1078
+display_name: "Valid Accounts"
+atomic_tests:
+  - name: Admin Authorization Right Requested Without Interaction (2026 macOS)
+    description: |
+      Simulates a process asking for an administrator right it can't get: `security authorize` requests system.privilege.admin without allowing user interaction, so authd refuses it.
+
+      Fidelity limits:
+      - No credentials are given and no prompt can be shown; the request is refused
+
+      Expected telemetry: /usr/bin/security exec, and authd's refusal in the unified log (subsystem com.apple.Authorization: Failed to authorize right 'system.privilege.admin' ...).
+
+      Falcon block status: not blocked (2026-11-12 22:12Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        /usr/bin/security authorize -e system.privilege.admin || true
+        echo "Authorization request complete"
+      cleanup_command: |
+        echo "Cleanup complete (nothing to remove)"

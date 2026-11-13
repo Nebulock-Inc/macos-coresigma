@@ -1,0 +1,44 @@
+title: Background Task Management Agent Killed
+id: a7e5d59f-ba82-4a47-bb52-5f88e90355f9
+status: experimental
+description: |
+  Detects a process other than launchd sending SIGKILL, SIGTERM or SIGSTOP to the Background Task
+  Management agent, which notifies the user when a login item or launch agent is added. MacSync
+  (2026) kills it so its persistence goes unnoticed.
+references:
+  - https://securelist.com/macsync-new-version/121383
+  - https://attack.mitre.org/techniques/T1685/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_signal
+detection:
+  selection:
+    TargetImage|endswith: /BackgroundTaskManagementAgent
+    SignalNumber:
+      - 9
+      - 15
+      - 17
+  filter_launchd:
+    SigningID: com.apple.xpc.launchd
+  condition: selection and not filter_launchd
+falsepositives:
+  - Administrators restarting the agent while troubleshooting login items
+tags:
+  - attack.defense-impairment
+  - attack.t1685
+level: high
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

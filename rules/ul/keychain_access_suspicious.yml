@@ -1,5 +1,5 @@
 title: macOS Suspicious Keychain Access
-id: d4e5f6a7-b8c9-4012-def0-123456789012
+id: 88fbd60c-cf76-4783-88b6-d541268bc269
 status: experimental
 description: |
   Detects suspicious access to the macOS Keychain, which stores passwords,
@@ -9,14 +9,13 @@ references:
   - https://attack.mitre.org/techniques/T1555/001/
   - https://www.sentinelone.com/blog/macos-keychain-extraction/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/22
-modified: 2025/01/22
+date: 2025-01-22
+modified: 2026-11-11
 logsource:
   product: macos
   service: unifiedlog
+  category: securityd
 detection:
-  selection_subsystem:
-    subsystem: com.apple.securityd
   selection_keychain:
     message|contains:
       - 'keychain'
@@ -33,12 +32,25 @@ detection:
       - 'failed'
       - 'dump'
       - 'export'
-  condition: selection_subsystem and selection_keychain and selection_suspicious
+  condition: selection_keychain and selection_suspicious
 falsepositives:
   - Legitimate password manager applications
   - System services accessing credentials
   - SSH key access
 level: high
 tags:
-  - attack.credential_access
+  - attack.credential-access
   - attack.t1555.001
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

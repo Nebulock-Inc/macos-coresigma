@@ -1,0 +1,39 @@
+attack_technique: T1559
+display_name: "Inter-Process Communication"
+atomic_tests:
+  - name: XPC Connection to a Dummy .test. Mach Service (2026 macOS)
+    description: |
+      Simulates a connection to an attacker-registered XPC service: loads a dummy agent that registers the Mach service com.coresigma-sim.test.xpcsvc in the user's GUI domain, and a compiled stub sends it one message.
+
+      Fidelity limits:
+      - The service is the simulation's own dummy (it runs /usr/bin/true and answers nothing)
+      - The plist lives in /tmp/cs_sim_xpcsvc, not a LaunchAgents directory, and is booted out at the end
+
+      Expected telemetry: launchctl execs, the stub's exec, and an ESF xpc_connect with service name com.coresigma-sim.test.xpcsvc.
+
+      Falcon block status: not blocked (2026-11-12 21:57Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        D=/tmp/cs_sim_xpcsvc; L=com.coresigma-sim.test.xpcsvc; P="$D/$L.plist"
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0"><dict>' "<key>Label</key><string>$L</string>" "<key>MachServices</key><dict><key>$L</key><true/></dict>" '<key>ProgramArguments</key><array><string>/usr/bin/true</string></array>' '</dict></plist>' > "$P"
+        plutil -lint "$P"
+        printf '%s\n' '#include <xpc/xpc.h>' '#include <unistd.h>' 'int main(int argc, char **argv) {' '  if (argc < 2) return 1;' '  xpc_connection_t c = xpc_connection_create_mach_service(argv[1], NULL, 0);' '  xpc_connection_set_event_handler(c, ^(xpc_object_t e) { (void)e; });' '  xpc_connection_resume(c);' '  xpc_object_t m = xpc_dictionary_create(NULL, NULL, 0);' '  xpc_dictionary_set_string(m, "sim", "coresigma");' '  xpc_connection_send_message(c, m);' '  sleep(2);' '  xpc_connection_cancel(c);' '  return 0;' '}' > "$D/stub.c"
+        cc -o "$D/cs_xpc_client" "$D/stub.c"
+        /bin/launchctl bootstrap "gui/$(id -u)" "$P"
+        "$D/cs_xpc_client" "$L"
+        /bin/launchctl bootout "gui/$(id -u)/$L"
+        echo "XPC service connection complete"
+      cleanup_command: |
+        L=com.coresigma-sim.test.xpcsvc
+        /bin/launchctl bootout "gui/$(id -u)/$L" >/dev/null 2>&1 || true
+        rm -rf /tmp/cs_sim_xpcsvc
+        echo "Cleanup complete"

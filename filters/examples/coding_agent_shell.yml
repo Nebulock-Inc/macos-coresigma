@@ -1,0 +1,11 @@
+title: npm-Installed Coding Agent Shell Filter
+id: a73205f3-7bbb-4e2d-aae2-931d246d7e88
+logsource:
+  product: macos
+  category: process_creation
+filter:
+  rules:
+    - 3da590d3-6c09-4b25-992c-58dff3a069ec  # Node or Bun Starts osascript, curl or a Fetching Shell (base of package_manager_persistence)
+  selection:
+    Image: '/bin/zsh'
+  condition: not selection

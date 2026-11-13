@@ -1,0 +1,30 @@
+attack_technique: T1059
+display_name: Command and Scripting Interpreter
+atomic_tests:
+  - name: SIGTERM from perl to a Dummy sleep (2026 macOS)
+    description: |
+      Simulates a script interpreter managing other processes: starts a dummy sleep, then has perl send it SIGTERM.
+
+      Fidelity limits:
+      - The target is the simulation's own sleep, renamed cs_sim_perlsig_sleep in its argv; no other process is signalled
+
+      Expected telemetry: an ESF signal event, signal 15, from /usr/bin/perl to /bin/sleep.
+
+      Falcon block status: not blocked (2026-11-13 14:54Z run; macOS 26.7)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        ( exec -a cs_sim_perlsig_sleep /bin/sleep 60 ) & P=$!
+        sleep 1
+        /usr/bin/perl -e 'kill("TERM", $ARGV[0]) or die "kill failed: $!\n"' "$P"
+        rc=0; wait "$P" || rc=$?
+        [ "$rc" -eq 143 ] || { echo "the dummy sleep didn't end on SIGTERM (status $rc)"; exit 1; }
+        echo "perl signal step complete"
+      cleanup_command: |
+        set -e
+        pkill -f '^cs_sim_perlsig_sleep' >/dev/null 2>&1 || true
+        echo "Cleanup complete"

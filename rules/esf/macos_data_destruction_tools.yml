@@ -1,5 +1,5 @@
 title: macOS Data Destruction Tools
-id: e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b
+id: d17e46cc-8609-4896-95f5-5721382d5ffe
 status: experimental
 description: 'Detects execution of data destruction tools (rm, shred, srm, dd) with
   aggressive
@@ -11,18 +11,15 @@ description: 'Detects execution of data destruction tools (rm, shred, srm, dd) w
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1485/
 - https://attack.mitre.org/techniques/T1070/004/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /rm
@@ -32,12 +29,16 @@ detection:
   selection_dangerous:
     CommandLine|contains:
     - -rf
-    - -R
     - --recursive
     - if=/dev/zero
     - if=/dev/random
     - of=/dev/
-  condition: selection_event and selection_process and selection_dangerous
+  selection_dangerous_recursive:
+    # -R but not -r. A regex is case-sensitive on most backends; |cased doesn't convert on Lucene, ES|QL or Splunk
+    CommandLine|re: '.* -R.*'
+  filter_dev_null:
+    CommandLine|contains: of=/dev/null
+  condition: selection_process and (selection_dangerous or selection_dangerous_recursive) and not filter_dev_null
 falsepositives:
 - System maintenance and cleanup operations
 - Software uninstallation procedures
@@ -52,5 +53,19 @@ fields:
 tags:
 - attack.impact
 - attack.t1485
+- attack.stealth
 - attack.t1070.004
 level: high
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

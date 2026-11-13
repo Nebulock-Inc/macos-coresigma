@@ -1,0 +1,37 @@
+attack_technique: T1685
+display_name: "Disable or Modify Tools"
+atomic_tests:
+  - name: SIGTERM a Stand-in Process Named BackgroundTaskManagementAgent (2026 macOS)
+    description: |
+      Simulates stopping the Background Task Management agent so new login items go unreported: starts a compiled sleeper named BackgroundTaskManagementAgent and sends it SIGTERM.
+
+      Fidelity limits:
+      - The target is the simulation's own stub in /tmp with the agent's name; the real agent is not signalled
+
+      Expected telemetry: The stub's exec and an ESF signal event, signal 15, from bash to /private/tmp/cs_sim_btmkill/BackgroundTaskManagementAgent.
+
+      Falcon block status: not blocked (2026-11-12 22:02Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        D=/tmp/cs_sim_btmkill
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' '#include <unistd.h>' 'int main(void) { sleep(60); return 0; }' > "$D/sleeper.c"
+        cc -o "$D/BackgroundTaskManagementAgent" "$D/sleeper.c"
+        "$D/BackgroundTaskManagementAgent" & P=$!
+        sleep 1
+        kill -15 "$P"
+        wait "$P" || true
+        echo "SIGTERM step complete"
+      cleanup_command: |
+        set -e
+        pkill -9 -f /tmp/cs_sim_btmkill/BackgroundTaskManagementAgent >/dev/null 2>&1 || true
+        rm -rf /tmp/cs_sim_btmkill
+        echo "Cleanup complete"

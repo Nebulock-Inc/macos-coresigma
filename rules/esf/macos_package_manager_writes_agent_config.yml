@@ -1,0 +1,50 @@
+title: Node or Bun Creates AI-Agent or IDE Task Configuration
+id: c29b1adc-3e62-447e-83a6-cee80e8a8290
+status: experimental
+description: |
+  Detects node, bun or deno creating .claude/settings.json, .claude/settings.local.json or
+  .vscode/tasks.json. Claude Code settings can hold hooks that run commands when a session starts,
+  and a VS Code task can run when a folder opens, so a package payload that writes them runs again
+  every time the developer opens the project or starts the agent. Mini Shai-Hulud (May 2026)
+  persisted this way. Only file creation is covered: an existing file rewritten in place produces no
+  create event.
+references:
+  - https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem
+  - https://attack.mitre.org/techniques/T1546/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: file_event
+detection:
+  selection_runtime:
+    Image|endswith:
+      - /node
+      - /bun
+      - /deno
+  selection_config:
+    TargetFilename|endswith:
+      - /.claude/settings.json
+      - /.claude/settings.local.json
+      - /.vscode/tasks.json
+  condition: selection_runtime and selection_config
+falsepositives:
+  - Claude Code installed through npm runs as node and creates its own settings files (the native Claude Code binary is not node)
+  - Project generators that write a .vscode/tasks.json
+tags:
+  - attack.persistence
+  - attack.t1546
+level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

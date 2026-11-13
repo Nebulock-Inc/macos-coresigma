@@ -1,0 +1,11 @@
+title: Xcode Compression Tools Filter
+id: 06b1dae3-5ceb-4c6f-aa71-a27642ef1323
+logsource:
+  product: macos
+  category: process_creation
+filter:
+  rules:
+    - 5906b20c-036d-46f9-8394-2cc8f711c46b  # macOS Data Compression Tools
+  selection:
+    Image|startswith: '/Applications/Xcode.app/'
+  condition: not selection

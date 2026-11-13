@@ -64,3 +64,14 @@ dashboard_update.log
 
 # External documentation (large binary files)
 docs/*.pdf
+.superpowers/
+
+# Captures (raw, unscrubbed)
+captures/
+
+# Private strings (local host identifiers)
+tests/private_strings.local.json
+
+
+# Simulation runner settings (real account/instance IDs)
+simulations/sim.env

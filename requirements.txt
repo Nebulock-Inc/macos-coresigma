@@ -1,17 +1,22 @@
-# Core dependencies
+# Core dependencies - pinned (Python 3.10 to 3.14: pySigma 1.5.1's floor; no PyYAML wheel for 3.15 yet)
+# The ClickHouse backend needs Python 3.13+ and is separate: pip install -r requirements-clickhouse.txt
 # Note: Do NOT install sigmatools - it conflicts with sigma-cli
-pysigma>=0.9.0
-pysigma-backend-elasticsearch>=1.0.0
-sigma-cli>=1.0.0
+pysigma==1.5.1
+pysigma-backend-elasticsearch==2.1.0
+pysigma-backend-splunk==2.1.0
+pysigma-backend-crowdstrike==3.0.0
+pysigma-backend-kusto==1.0.1
+pysigma-backend-opensearch==2.0.3
+sigma-cli==3.1.0
 
-# Elasticsearch support (compatible with ES 8.x)
-elasticsearch>=8.0.0,<9.0.0
+# Local plugin
+-e pipelines/pysigma-pipeline-macos
 
 # Utilities
 pyyaml>=6.0
 requests>=2.28.0
 
-# Optional but recommended
+# Testing
 pytest>=7.0.0
 psutil>=5.9.0
 

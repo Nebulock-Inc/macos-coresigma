@@ -1,0 +1,11 @@
+title: Apple System Process Filter (by parent path)
+id: fe3f7d23-53c0-46e5-92ad-0fecda435b5a
+logsource:
+  product: macos
+  category: process_creation
+filter:
+  rules:
+    - 06b33424-75d1-4993-b57f-eca4580b408a  # macOS DNS Query Tools for C2
+  selection:
+    ParentImage|startswith: '/System/Library/'
+  condition: not selection

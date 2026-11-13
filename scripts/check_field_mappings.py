@@ -2,19 +2,25 @@
 """Check actual field mappings in Elasticsearch."""
 
 import os
+import sys
 import requests
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "collectors"))
+from auth import AuthenticationError, get_elasticsearch_auth  # noqa: E402
+
 ES_URL = os.environ.get("ES_URL", "http://localhost:9200")
-ES_USER = os.environ.get("ES_USER", "elastic")
-ES_PASSWORD = os.environ.get("ES_PASSWORD", "changeme")
 
 def main():
-    auth = (ES_USER, ES_PASSWORD)
+    try:  # the collectors' order: ES_API_KEY, the Keychain, ES_USER/ES_PASSWORD, ~/.coresigma/config.yml
+        api_key, auth = get_elasticsearch_auth(ES_URL)
+    except AuthenticationError as e:
+        sys.exit(str(e))
+    headers = {"Authorization": f"ApiKey {api_key}"} if api_key else {}
     
     # Get index mappings
     print("Checking field mappings in macos-telemetry-esf-* index...\n")
     
-    resp = requests.get(f"{ES_URL}/macos-telemetry-esf-*/_mapping", auth=auth)
+    resp = requests.get(f"{ES_URL}/macos-telemetry-esf-*/_mapping", auth=auth, headers=headers)
     if resp.status_code != 200:
         print(f"Error: {resp.text}")
         return

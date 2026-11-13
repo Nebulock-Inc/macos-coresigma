@@ -1,5 +1,5 @@
 title: Connection to Suspicious XPC Service
-id: d2e3f4a5-b6c7-4d8e-9f0a-1b2c3d4e5f6a
+id: 76268965-b31d-4aee-8098-12b72f696481
 status: experimental
 description: Detects connections to XPC services with suspicious or generic names
   that may indicate malicious IPC
@@ -7,18 +7,15 @@ references:
 - https://attack.mitre.org/techniques/T1559/
 - https://wojciechregula.blog/post/learn-xpc-exploitation-part-1-broken-cryptography/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/29
+date: 2025-10-29
 tags:
 - attack.execution
 - attack.t1559
 logsource:
   product: macos
-  service: endpointsecurity
   category: xpc_connection
 detection:
   selection:
-    esf.event_type: 65
-    event.action: xpc_connect
     XpcServiceName|contains:
     - backdoor
     - rootkit
@@ -31,4 +28,17 @@ detection:
 falsepositives:
 - Development and testing services
 level: high
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

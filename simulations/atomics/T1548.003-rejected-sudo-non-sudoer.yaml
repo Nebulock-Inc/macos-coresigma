@@ -1,0 +1,41 @@
+attack_technique: T1548.003
+display_name: "Abuse Elevation Control Mechanism: Sudo and Sudo Caching"
+atomic_tests:
+  - name: Rejected sudo by a Throwaway Non-Sudoer (2026 macOS)
+    description: |
+      Simulates failed sudo attempts: creates a throwaway account with no password and no sudo rights, and runs sudo as that account three times with a wrong password; the cleanup deletes the account.
+
+      Fidelity limits:
+      - The account can't log in (no password, shell /usr/bin/false) and exists for a few seconds
+      - A dscl delete run from Terminal asks TCC for administrator-files access for Terminal and waits on a prompt, so the account is deleted by the cleanup, which the run script starts from its root shell, not Terminal
+      - The wrong passwords are fixed dummy strings fed on stdin (-S)
+
+      Expected telemetry: sudo's denial lines in the unified log (process /usr/bin/sudo: incorrect password attempts or user NOT in sudoers); ESF sudo events with a reject; od_create_user (od_delete_user comes from the cleanup).
+
+      Falcon block status: not blocked (2026-11-12 23:45Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: passwordless sudo for the user.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        sudo -n true 2>/dev/null || { echo "prereq missing: passwordless sudo"; exit 1; }
+        U=cs_sim_nosudo
+        if dscl . -read "/Users/$U" >/dev/null 2>&1; then echo "$U already exists; not touching it"; exit 1; fi
+        N=""; for i in $(seq 4801 4899); do [ -z "$(dscl . -search /Users UniqueID "$i")" ] && { N=$i; break; }; done; [ -n "$N" ] || { echo "no free UniqueID in 4801-4899"; exit 1; }
+        sudo -n dscl . -create "/Users/$U"
+        sudo -n dscl . -create "/Users/$U" UniqueID "$N"
+        sudo -n dscl . -create "/Users/$U" PrimaryGroupID 20
+        sudo -n dscl . -create "/Users/$U" UserShell /usr/bin/false
+        sudo -n dscl . -create "/Users/$U" NFSHomeDirectory /var/empty
+        for i in 1 2 3; do printf 'coresigma-sim-wrong-%s\n' "$i" | sudo -n -u "$U" /usr/bin/sudo -S -k -p '' /usr/bin/true || true; sleep 1; done
+        echo "Rejected sudo step complete; the cleanup deletes the account"
+      cleanup_command: |
+        U=cs_sim_nosudo
+        if dscl . -read "/Users/$U" >/dev/null 2>&1; then sudo -n dscl . -delete "/Users/$U"; fi
+        sudo -n rm -f "/var/db/sudo/lectured/$U" "/var/db/sudo/ts/$U"
+        if dscl . -read "/Users/$U" >/dev/null 2>&1; then echo "$U still exists"; exit 1; fi
+        echo "Cleanup complete"

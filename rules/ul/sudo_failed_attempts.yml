@@ -1,5 +1,5 @@
 title: macOS Multiple Failed Sudo Attempts
-id: f6a7b8c9-d0e1-4234-f012-345678901234
+id: dbc5f4c6-c281-4662-8eb2-9addcecaa40d
 status: experimental
 description: |
   Detects multiple failed sudo authentication attempts, which may indicate
@@ -9,14 +9,13 @@ references:
   - https://attack.mitre.org/techniques/T1548/003/
   - https://attack.mitre.org/techniques/T1110/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/22
-modified: 2025/01/22
+date: 2025-01-22
+modified: 2026-11-11
 logsource:
   product: macos
   service: unifiedlog
+  category: sudo
 detection:
-  selection_subsystem:
-    subsystem: com.apple.sudo
   selection_failed:
     message|contains:
       - 'authentication failed'
@@ -25,13 +24,26 @@ detection:
       - 'NOT in sudoers'
       - 'user NOT authorized'
       - 'sorry, try again'
-  condition: selection_subsystem and selection_failed
+  condition: selection_failed
 falsepositives:
   - Users forgetting their password
   - Mistyped passwords
 level: high
 tags:
-  - attack.privilege_escalation
+  - attack.privilege-escalation
   - attack.t1548.003
-  - attack.credential_access
+  - attack.credential-access
   - attack.t1110
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

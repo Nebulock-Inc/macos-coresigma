@@ -1,0 +1,35 @@
+attack_technique: T1059.002
+display_name: "Command and Scripting Interpreter: AppleScript"
+atomic_tests:
+  - name: Hands-on Window for do shell script in Script Editor (2026 macOS)
+    description: |
+      A recording window for a hands-on step: writes a one-line AppleScript (do shell script "echo cs_sim_scripteditor") and opens it in Script Editor. While the window is open, a person clicks Run, so Script Editor starts /bin/sh.
+
+      Fidelity limits:
+      - The script only echoes a marker; it targets no other app, so it raises no Automation prompt
+      - The Run click is made by hand
+      - The window lasts 3 minutes; run it with SIM_TIMEOUT=240 so run_sim.sh waits for it
+      - Other GUI activity can fall inside the window, so its sim_windows.json entry lists the one rule it counts for
+
+      Expected telemetry: an ESF exec of /bin/sh (`sh -c echo cs_sim_scripteditor`) whose parent image is Script Editor.
+
+      Falcon block status: not blocked (2026-11-13 16:16Z run; macOS 26.7)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_scripteditor
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' 'do shell script "echo cs_sim_scripteditor"' > "$D/cs_sim_scripteditor.applescript"
+        open -a "Script Editor" "$D/cs_sim_scripteditor.applescript"
+        echo "coreSigma hands-on window: in Script Editor, click Run (the play button), then quit Script Editor."
+        echo "This window closes in 3 minutes."
+        for left in $(seq 180 -10 10); do printf '\r%3d s left ' "$left"; sleep 10; done
+        echo; echo "Script Editor window closed"
+      cleanup_command: |
+        pkill -x "Script Editor" >/dev/null 2>&1 || true
+        rm -rf /tmp/cs_sim_scripteditor
+        echo "Cleanup complete"

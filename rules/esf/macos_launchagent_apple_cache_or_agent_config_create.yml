@@ -1,0 +1,51 @@
+title: LaunchAgent, Apple-Named Cache File or Agent/IDE Config Created
+id: 49aa5658-6498-49ab-a0f8-e6c4b3caa0db
+name: launchagent_or_apple_binary_or_agent_config_write
+status: experimental
+description: |
+  Base rule for the package-manager persistence correlation, matching its second step: creation of
+  a LaunchAgent plist; of a com.apple.*-named file in /Library/Caches by curl, wget or a JavaScript
+  runtime (the Axios dropper wrote its implant there); or of .claude/settings.json,
+  .claude/settings.local.json or .vscode/tasks.json. Only file creation is covered: an existing file
+  rewritten in place produces no create event.
+references:
+  - https://www.huntress.com/blog/supply-chain-compromise-axios-npm-package
+  - https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: file_event
+detection:
+  selection_launchagent:
+    TargetFilename|contains: /Library/LaunchAgents/
+    TargetFilename|endswith: .plist
+  selection_apple_named_cache:
+    TargetFilename|startswith: /Library/Caches/com.apple.
+    Image|endswith:
+      - /curl
+      - /wget
+      - /node
+      - /bun
+      - /deno
+  selection_agent_config:
+    TargetFilename|endswith:
+      - /.claude/settings.json
+      - /.claude/settings.local.json
+      - /.vscode/tasks.json
+  condition: 1 of selection_*
+falsepositives:
+  - Installers and updaters creating their own LaunchAgent
+  - Claude Code and editors creating their own settings files
+tags:
+  - attack.persistence
+  - attack.t1543.001
+  - attack.t1546
+  - attack.stealth
+  - attack.t1036.005
+level: low
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - package_manager_persistence

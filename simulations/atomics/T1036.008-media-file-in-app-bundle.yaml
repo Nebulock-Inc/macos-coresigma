@@ -1,0 +1,29 @@
+attack_technique: T1036.008
+display_name: "Masquerade File Type"
+atomic_tests:
+  - name: Write an Image File into a Dummy App Bundle's Code Directory (2026 macOS)
+    description: |
+      Simulates a payload disguised as media inside an app bundle: writes a file named payload.png into a dummy bundle's Contents/MacOS directory.
+
+      Fidelity limits:
+      - The bundle is an empty dummy under /tmp/cs_sim_media; the .png holds only a PNG signature and text
+
+      Expected telemetry: ESF create of /private/tmp/cs_sim_media/CoreSigmaSim.app/Contents/MacOS/payload.png.
+
+      Falcon block status: not blocked (2026-11-12 21:53Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_media; M="$D/CoreSigmaSim.app/Contents/MacOS"
+        rm -rf "$D" && mkdir -p "$M"
+        printf '\211PNG\r\n\032\ncoresigma simulation dummy\n' > "$M/payload.png"
+        ls -l "$M"
+        echo "Media file write complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_media
+        echo "Cleanup complete"

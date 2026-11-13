@@ -1,21 +1,19 @@
 title: macOS ESF Suspicious Process Execution
-id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+id: 25a227ce-e25a-4954-9063-84b6837a5a05
 status: experimental
 description: Detects suspicious process execution patterns commonly used in malware and attacks
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/15
-modified: 2025/01/15
+date: 2025-01-15
+modified: 2026-11-11
 logsource:
     product: macos
-    service: endpointsecurity
     category: process_creation
 detection:
     selection:
-        esf.event_type: 9
-        event.action: exec
         Image|contains:
             - '/tmp/'
             - '/var/tmp/'
+            - '/var/folders/'
             - '/dev/shm/'
         CommandLine|contains:
             - 'curl'
@@ -29,5 +27,17 @@ falsepositives:
 level: medium
 tags:
     - attack.execution
-    - attack.command_and_control
-
+    - attack.command-and-control
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

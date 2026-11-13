@@ -1,0 +1,45 @@
+attack_technique: T1686
+display_name: "Impair Defenses: Disable or Modify System Firewall"
+atomic_tests:
+  - name: Toggle the Application Firewall and Restore Its State (2026 macOS)
+    description: |
+      Simulates turning the application firewall off: records its global state, switches it the other way and back, so one of the two changes turns it off, and leaves the original state in place.
+
+      Fidelity limits:
+      - The firewall is off for about two seconds when it started on; when it started off it is on for about two seconds, then off again as before
+      - Only global states 0 (off) and 1 (on) are handled; any other state stops the atomic unchanged
+
+      Expected telemetry: socketfilterfw execs (--getglobalstate, --setglobalstate) and the firewall's unified log lines (subsystem com.apple.ALF.ApplicationFirewall). On macOS 26.7 switching it off logs `FilterMessageHandler turning firewall off` and `Disabling stealth as firewall has been turned off`.
+
+      Falcon block status: not blocked (2026-11-13 04:03Z run; macOS 26.7)
+
+      Prerequisite: passwordless sudo for the user.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        sudo -n true 2>/dev/null || { echo "prereq missing: passwordless sudo"; exit 1; }
+        F=/usr/libexec/ApplicationFirewall/socketfilterfw; D=/tmp/cs_sim_fw
+        rm -rf "$D" && mkdir -p "$D"
+        S=$(sudo -n "$F" --getglobalstate | sed -n 's/.*State = \([0-9]\).*/\1/p')
+        echo "$S" > "$D/state.orig"; echo "Firewall global state before: $S"
+        case "$S" in
+          0) sudo -n "$F" --setglobalstate on; sleep 2; sudo -n "$F" --setglobalstate off ;;
+          1) sudo -n "$F" --setglobalstate off; sleep 2; sudo -n "$F" --setglobalstate on ;;
+          *) echo "firewall global state '$S' not handled; nothing changed"; exit 1 ;;
+        esac
+        S=$(sudo -n "$F" --getglobalstate | sed -n 's/.*State = \([0-9]\).*/\1/p')
+        [ "$S" = "$(cat "$D/state.orig")" ] || { echo "state $S differs from the original"; exit 1; }
+        echo "Firewall toggle complete; state restored to $S"
+      cleanup_command: |
+        set -e
+        F=/usr/libexec/ApplicationFirewall/socketfilterfw; D=/tmp/cs_sim_fw
+        O=$(cat "$D/state.orig" 2>/dev/null || true)
+        S=$(sudo -n "$F" --getglobalstate | sed -n 's/.*State = \([0-9]\).*/\1/p')
+        if [ "$O" = 0 ] && [ "$S" != 0 ]; then sudo -n "$F" --setglobalstate off; fi
+        if [ "$O" = 1 ] && [ "$S" != 1 ]; then sudo -n "$F" --setglobalstate on; fi
+        rm -rf "$D"
+        echo "Cleanup complete"

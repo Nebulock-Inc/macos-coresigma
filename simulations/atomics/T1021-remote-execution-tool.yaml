@@ -1,0 +1,27 @@
+attack_technique: T1021
+display_name: "Remote Services"
+atomic_tests:
+  - name: Run a Command under expect or screen (2026 macOS)
+    description: |
+      Simulates a session-automation tool driving a command: expect spawns /bin/echo, or, where expect is missing, screen runs a short sleep in a detached session.
+
+      Fidelity limits:
+      - Nothing remote: the spawned command runs locally and exits
+
+      Expected telemetry: /usr/bin/expect exec (or /usr/bin/screen execs for the detached session and its quit).
+
+      Falcon block status: not blocked (2026-11-12 21:37Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        if [ -x /usr/bin/expect ]; then /usr/bin/expect -c 'spawn /bin/echo coresigma-sim; expect eof'
+        elif [ -x /usr/bin/screen ]; then /usr/bin/screen -dmS cs_sim_screen /bin/sleep 5; sleep 1; /usr/bin/screen -S cs_sim_screen -X quit || true
+        else echo "prereq missing: /usr/bin/expect or /usr/bin/screen"; exit 1; fi
+        echo "Session tool step complete"
+      cleanup_command: |
+        /usr/bin/screen -S cs_sim_screen -X quit >/dev/null 2>&1 || true
+        echo "Cleanup complete"

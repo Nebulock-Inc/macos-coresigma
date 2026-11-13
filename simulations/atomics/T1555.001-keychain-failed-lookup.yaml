@@ -1,0 +1,42 @@
+attack_technique: T1555.001
+display_name: "Credentials from Password Stores: Keychain"
+atomic_tests:
+  - name: Failed Lookup and Wrong-Password Unlock on a Throwaway Keychain (2026 macOS)
+    description: |
+      Simulates failed keychain access: on a throwaway keychain, looks up an item that doesn't exist, then locks the keychain and tries to unlock it with the wrong password.
+
+      Fidelity limits:
+      - The keychain, its password and its item are throwaway dummies under /tmp/cs_sim_kclookup; the login and System keychains are never touched
+      - The lookup runs while the keychain is unlocked, and the unlock passes its password with -p, so nothing asks for a password
+      - Nothing reads the keychain while it is locked
+      - The user's keychain search list is recorded first and restored by cleanup
+
+      Expected telemetry: /usr/bin/security execs (find-generic-password, lock-keychain, unlock-keychain). Observed on macOS 26.7: the missing-item lookup logs no failure line; the wrong-password unlock logs `MacOS error: -25337`, `CSSMERR_CSP_INVALID_DATA` and `CSSMERR_DL_OPERATION_AUTH_DENIED` under com.apple.securityd, none naming the keychain.
+
+      Falcon block status: not blocked (2026-11-13 14:56Z run; macOS 26.7)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_kclookup; KC="$D/cs-sim-lookup.keychain-db"; PW=coresigma-sim-dummy
+        rm -rf "$D" && mkdir -p "$D"
+        /usr/bin/security list-keychains -d user > "$D/search_list.orig"
+        /usr/bin/security create-keychain -p "$PW" "$KC"
+        xargs /usr/bin/security list-keychains -d user -s < "$D/search_list.orig"
+        /usr/bin/security unlock-keychain -p "$PW" "$KC"
+        /usr/bin/security add-generic-password -a cs_sim -s cs_sim_lookup_present -w coresigma-sim-dummy-item "$KC"
+        if /usr/bin/security find-generic-password -a cs_sim -s cs_sim_lookup_missing "$KC" >/dev/null 2>&1; then exit 1; fi
+        sleep 1
+        /usr/bin/security lock-keychain "$KC"
+        if /usr/bin/security unlock-keychain -p coresigma-sim-wrong "$KC" 2>/dev/null; then exit 1; fi
+        echo "Failed lookup steps complete"
+      cleanup_command: |
+        set -e
+        D=/tmp/cs_sim_kclookup
+        /usr/bin/security delete-keychain "$D/cs-sim-lookup.keychain-db" 2>/dev/null || true
+        if [ -s "$D/search_list.orig" ]; then xargs /usr/bin/security list-keychains -d user -s < "$D/search_list.orig"; fi
+        rm -rf "$D"
+        echo "Cleanup complete"

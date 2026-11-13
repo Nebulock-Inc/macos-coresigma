@@ -1,0 +1,53 @@
+title: Paste-to-Stealer Chain
+id: 11ac0458-e527-4568-8205-243ebed6fd8c
+status: experimental
+description: |
+  Detects the 2026 AMOS-lineage infection chain (AMOS, Odyssey, MacSync, SHub) for one host and user
+  within 15 minutes, in order: a ClickFix download-and-run from a shell or Script Editor, then a fake
+  password prompt or a dscl -authonly password check, then a LaunchDaemon load or a ditto archive in a
+  temporary directory. A LaunchDaemon loaded with sudo runs as root, so with the user.name grouping
+  that path joins the chain only when the loader runs as the user; the ditto step does not need root.
+references:
+  - https://moonlock.com/mid-2026-macos-threat-report
+  - https://www.microsoft.com/en-us/security/blog/2026/05/06/clickfix-campaign-uses-fake-macos-utilities-lures-deliver-infostealers
+  - https://www.jamf.com/blog/clickfix-macos-script-editor-atomic-stealer/
+  - https://unit42.paloaltonetworks.com/atomic-macos-amos-stealer-activity
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+modified: 2026-11-12  # base rule now also matches JXA's hiddenAnswer
+tags:
+  - attack.execution
+  - attack.t1204.004
+  - attack.credential-access
+  - attack.t1056.002
+  - attack.collection
+  - attack.t1560.001
+correlation:
+  type: temporal_ordered
+  rules:
+    - terminal_or_scripteditor_download_exec
+    - credential_capture_any
+    - launch_persistence_or_ditto_staging
+  group-by:
+    - host.name
+    - user.name
+  timespan: 15m
+  generate: false
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fails
+      opensearch: fails
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified
+    splunk: temporal  # pysigma-backend-splunk 2.1.0 has no temporal_ordered; the matrix tool applies this
+    logscale: unsupported  # pysigma-backend-crowdstrike 3.0.0 has no correlation support
+falsepositives:
+  - An administrator running an install one-liner, then a script that checks a password, then a job that zips files in /tmp
+level: high

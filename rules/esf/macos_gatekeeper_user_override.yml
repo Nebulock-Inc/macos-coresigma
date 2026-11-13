@@ -1,5 +1,5 @@
 title: macOS Gatekeeper User Override
-id: a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
+id: 61a63a62-a6c7-432c-af13-01a28270790e
 status: experimental
 description: 'Detects Gatekeeper user override events where users explicitly allow
   execution
@@ -12,32 +12,42 @@ description: 'Detects Gatekeeper user override events where users explicitly all
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1553/001/
 - https://attack.mitre.org/techniques/T1204/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: gatekeeper_override
 detection:
   selection:
-    esf.event_type: 146
-    event.action: gatekeeper_user_override
+    # every ESF event has an acting process: the category does the scoping
+    Image|startswith: /
   condition: selection
 falsepositives:
 - Users intentionally running trusted unsigned software
 - Development and testing activities
 - Legacy applications without notarization
 fields:
-- event_type
-- event_name
+- Image
 - User
-- file_path
-- application
 tags:
-- attack.defense_evasion
+- attack.defense-impairment
 - attack.t1553.001
 - attack.execution
 - attack.t1204
 level: high
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

@@ -10,25 +10,22 @@ description: 'Detects mounting of network shares (SMB, AFP, NFS) which may indic
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1021/002/
 - https://attack.mitre.org/techniques/T1039/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /mount
     - /mount_smbfs
     - /mount_afp
     - /mount_nfs
-  condition: selection_event and selection_process
+  condition: selection_process
 falsepositives:
 - Legitimate network share access for file sharing
 - Automated backup systems accessing network storage
@@ -40,7 +37,20 @@ fields:
 - ParentProcessId
 - User
 tags:
-- attack.lateral_movement
+- attack.lateral-movement
 - attack.t1021.002
 - attack.t1039
 level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

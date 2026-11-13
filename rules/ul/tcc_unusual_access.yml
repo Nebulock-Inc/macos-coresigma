@@ -1,32 +1,48 @@
 title: macOS UL Unusual TCC Access Request
-id: c3d4e5f6-a7b8-9012-cdef-345678901234
+id: c5bc993c-4a74-4a2d-8b33-156e53705579
 status: experimental
 description: Detects unusual TCC (Transparency, Consent, and Control) access requests that may indicate malicious behavior
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/15
-modified: 2025/01/15
+date: 2025-01-15
+modified: 2026-11-11
 logsource:
     product: macos
     service: unifiedlog
     category: tcc
 detection:
-    selection:
-        subsystem: com.apple.TCC
+    selection_service:
+        # tccd logs service names, not the System Settings labels (Full Disk Access, Screen Recording)
         message|contains:
-            - 'Full Disk Access'
-            - 'Camera'
-            - 'Microphone'
-            - 'Screen Recording'
-        ProcessName|contains:
-            - '.dmg'
+            - 'kTCCServiceSystemPolicyAllFiles'
+            - 'kTCCServiceCamera'
+            - 'kTCCServiceMicrophone'
+            - 'kTCCServiceScreenCapture'
+    selection_client_path:
+        # the requesting client's path is in the message: the logging process is always tccd.
+        # Apps run from a mounted disk image show /Volumes/ or, once translocated, /AppTranslocation/.
+        message|contains:
+            - '/Volumes/'
+            - '/AppTranslocation/'
             - '.pkg'
             - '/tmp'
             - '/var/tmp'
-    condition: selection
+    condition: selection_service and selection_client_path
 falsepositives:
     - Legitimate installer applications
     - System configuration tools
 level: medium
 tags:
     - attack.collection
-
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: silent
+      elastic-esql: silent
+      opensearch: silent
+      splunk: silent
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

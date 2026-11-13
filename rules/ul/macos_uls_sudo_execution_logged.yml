@@ -1,13 +1,14 @@
 title: macOS ULS Sudo Execution Logged
 id: 7f4c4e1b-21d8-4b1c-8c3b-8f6e2d2a3b11
 status: experimental
-description: Detect sudo execution messages in Unified Logging. Adjust subsystem/category
-  and message patterns to environment.
+description: Detect sudo execution messages in Unified Logging. Adjust the message patterns
+  to the environment. Hosts whose sudoers sets `Defaults !log_allowed` don't log successful commands (COMMAND=), so there it sees only denials.
 author: Eric Brown - Nebulock, Inc.
 date: 2025-10-29
 logsource:
   product: macos
   service: unifiedlog
+  category: sudo
 level: low
 detection:
   selection:
@@ -19,4 +20,17 @@ falsepositives:
 - normal admin usage
 references:
 - https://ss64.com/osx/sudo.html
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

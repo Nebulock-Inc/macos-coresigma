@@ -1,0 +1,39 @@
+attack_technique: T1136.001
+display_name: "Create Account: Local Account"
+atomic_tests:
+  - name: Create and Delete a Throwaway Local Account (2026 macOS)
+    description: |
+      Simulates local account creation: dscl creates a throwaway account record (no password, no home, shell /usr/bin/false) and reads it back; the cleanup deletes it.
+
+      Fidelity limits:
+      - The account can't log in (no password, shell /usr/bin/false) and exists for a few seconds
+      - A dscl delete run from Terminal asks TCC for administrator-files access for Terminal and waits on a prompt, so the account is deleted by the cleanup, which the run script starts from its root shell, not Terminal
+
+      Expected telemetry: Open Directory events from opendirectoryd with dscl as instigator: od_create_user and attribute changes (od_delete_user comes from the cleanup).
+
+      Falcon block status: not blocked (2026-11-12 23:47Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: passwordless sudo for the user.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        sudo -n true 2>/dev/null || { echo "prereq missing: passwordless sudo"; exit 1; }
+        U=cs_sim_acct
+        if dscl . -read "/Users/$U" >/dev/null 2>&1; then echo "$U already exists; not touching it"; exit 1; fi
+        N=""; for i in $(seq 4801 4899); do [ -z "$(dscl . -search /Users UniqueID "$i")" ] && { N=$i; break; }; done; [ -n "$N" ] || { echo "no free UniqueID in 4801-4899"; exit 1; }
+        sudo -n dscl . -create "/Users/$U"
+        sudo -n dscl . -create "/Users/$U" UniqueID "$N"
+        sudo -n dscl . -create "/Users/$U" PrimaryGroupID 20
+        sudo -n dscl . -create "/Users/$U" UserShell /usr/bin/false
+        sudo -n dscl . -create "/Users/$U" NFSHomeDirectory /var/empty
+        dscl . -read "/Users/$U" UniqueID
+        echo "Account created; the cleanup deletes it"
+      cleanup_command: |
+        U=cs_sim_acct
+        if dscl . -read "/Users/$U" >/dev/null 2>&1; then sudo -n dscl . -delete "/Users/$U"; fi
+        if dscl . -read "/Users/$U" >/dev/null 2>&1; then echo "$U still exists"; exit 1; fi
+        echo "Cleanup complete"

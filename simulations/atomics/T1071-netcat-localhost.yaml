@@ -1,0 +1,24 @@
+attack_technique: T1071
+display_name: "Application Layer Protocol"
+atomic_tests:
+  - name: Netcat Port Check to Localhost (2026 macOS)
+    description: |
+      Simulates netcat use: a zero-I/O connect check to the local SSH port.
+
+      Fidelity limits:
+      - The connection stays on the host (127.0.0.1) and sends no data
+
+      Expected telemetry: /usr/bin/nc exec with `-z -w 3 127.0.0.1 22`.
+
+      Falcon block status: not blocked (2026-11-12 21:33Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        /usr/bin/nc -z -w 3 127.0.0.1 22 || true
+        echo "netcat check complete"
+      cleanup_command: |
+        echo "Cleanup complete (nothing to remove)"
