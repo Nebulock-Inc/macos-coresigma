@@ -1,3 +1,5 @@
+![coreSigma](docs/images/coresigma-banner.png)
+
 # macOS coreSigma
 
 **coreSigma** is a set of Sigma detection rules for macOS Endpoint Security (ESF) and Unified Log (UL) telemetry, the pySigma pipeline plugin that maps them onto several SIEM and EDR backends, collectors that turn `eslogger` and `log stream` output into ECS documents, and a support matrix that records which rules were seen firing.
