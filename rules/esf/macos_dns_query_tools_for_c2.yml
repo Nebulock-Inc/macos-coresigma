@@ -10,18 +10,15 @@ description: 'Detects execution of DNS query tools (dig, nslookup, host, dnscat2
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1071/004/
 - https://attack.mitre.org/techniques/T1568/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /dig
@@ -29,7 +26,7 @@ detection:
     - /host
     - /dnscat
     - /dnscat2
-  condition: selection_event and selection_process
+  condition: selection_process
 falsepositives:
 - Network troubleshooting and DNS diagnostics
 - Automated monitoring scripts checking DNS resolution
@@ -41,7 +38,20 @@ fields:
 - ParentProcessId
 - User
 tags:
-- attack.command_and_control
+- attack.command-and-control
 - attack.t1071.004
 - attack.t1568
 level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

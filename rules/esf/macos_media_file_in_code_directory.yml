@@ -1,0 +1,79 @@
+title: Media File Created in Code or Framework Directory
+id: 8ab0e23a-37fd-4321-bd99-506a38041fa5
+status: experimental
+description: |
+  Detects file creation events where a file with a media extension (.jpg, .jpeg, .png, .gif,
+  .bmp, .mp4, .mov, .avi, .tiff, .webp) is placed in an app bundle's code directories
+  (Contents/MacOS/, Contents/Frameworks/, Contents/Helpers/) or a local bin/sbin directory.
+  Legitimate macOS applications store media assets in Resources/ directories (for frameworks,
+  Versions/<version>/Resources/), not alongside executable code. A media-extension file in a
+  code directory indicates payload masquerading -- the file content does not match its
+  extension. This behavioral pattern is tool-agnostic and catches any masquerading technique
+  used to disguise executables, archives, or exploit payloads as media files. Only file creation
+  is covered: a payload written elsewhere and moved into place (a rename) does not match.
+references:
+  - https://attack.mitre.org/techniques/T1036/008/
+  - https://attack.mitre.org/techniques/T1027/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-03-31
+modified: 2026-11-11
+logsource:
+  product: macos
+  category: file_event
+detection:
+  selection_media_extension:
+    TargetFilename|endswith:
+      - '.jpg'
+      - '.jpeg'
+      - '.png'
+      - '.gif'
+      - '.bmp'
+      - '.mp4'
+      - '.mov'
+      - '.avi'
+      - '.tiff'
+      - '.webp'
+  selection_bundle_code_directory:
+    # anchored to the bundle layout, so project folders named macos/ or bin/ don't match
+    TargetFilename|contains:
+      - '.app/Contents/MacOS/'
+      - '.app/Contents/Frameworks/'
+      - '.app/Contents/Helpers/'
+  selection_bin_directory:
+    TargetFilename|startswith:
+      - /usr/local/bin/
+      - /usr/local/sbin/
+      - /opt/homebrew/bin/
+      - /opt/homebrew/sbin/
+  filter_bundle_resources:
+    TargetFilename|contains:
+      - '.app/Contents/Resources/'
+      - '.framework/Resources/'
+      - '.framework/Versions/*/Resources/'
+  condition: selection_media_extension and (selection_bundle_code_directory or selection_bin_directory) and not filter_bundle_resources
+falsepositives:
+  - Poorly structured Electron apps bundling media into framework directories
+  - Application updates temporarily staging assets in non-standard locations
+  - Custom macOS apps with non-standard bundle layouts
+fields:
+  - TargetFilename
+  - Image
+  - User
+tags:
+  - attack.stealth
+  - attack.t1036.008
+  - attack.t1027
+level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

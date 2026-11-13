@@ -1,0 +1,41 @@
+title: Mass Process Termination
+id: b7cb963c-d75b-4c2b-8f07-fdca09e712e1
+status: experimental
+description: Detects a single process sending SIGKILL or SIGTERM to more than 10 processes within one
+  minute, which may indicate ransomware or system disruption.
+references:
+- https://attack.mitre.org/techniques/T1489/
+author: Eric Brown - Nebulock, Inc.
+date: 2025-10-29
+modified: 2026-11-11
+tags:
+- attack.impact
+- attack.t1489
+correlation:
+  type: event_count
+  rules:
+  - macos_process_termination_signal
+  group-by:
+  - host.name
+  - ProcessId
+  timespan: 1m
+  condition:
+    gt: 10
+  generate: false
+falsepositives:
+- System shutdown scripts
+- Process management tools
+level: high
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fails
+      elastic-esql: fires
+      opensearch: fails
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

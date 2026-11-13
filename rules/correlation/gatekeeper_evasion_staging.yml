@@ -1,0 +1,50 @@
+title: Gatekeeper Evasion Staging
+id: 86a95328-419c-491c-ba4e-793b4a7f769e
+status: experimental
+description: |
+  Detects the MacSync (2026) staging sequence for one host and user within 30 minutes, in order:
+  xattr removing the quarantine attribute, codesign ad-hoc signing, then an Apple-named user
+  LaunchAgent loaded, a keychain partition list changed or the Background Task Management agent
+  killed. Developers remove quarantine and ad-hoc sign their own builds all day; the third step is
+  what separates the stealer from a build.
+references:
+  - https://securelist.com/macsync-new-version/121383
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+tags:
+  - attack.defense-impairment
+  - attack.t1553.001
+  - attack.t1553.002
+  - attack.persistence
+  - attack.t1543.001
+  - attack.credential-access
+  - attack.t1555.001
+correlation:
+  type: temporal_ordered
+  rules:
+    - quarantine_removed
+    - adhoc_codesign
+    - apple_named_launchagent_or_partition_list_or_btm_kill
+  group-by:
+    - host.name
+    - user.name
+  timespan: 30m
+  generate: false
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fails
+      opensearch: fails
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified
+    splunk: temporal  # pysigma-backend-splunk 2.1.0 has no temporal_ordered; the matrix tool applies this
+    logscale: unsupported  # pysigma-backend-crowdstrike 3.0.0 has no correlation support
+falsepositives:
+  - A developer building and ad-hoc signing an app, then installing a CI signing key with set-key-partition-list
+level: high

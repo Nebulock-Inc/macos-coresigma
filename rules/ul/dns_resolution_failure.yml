@@ -1,0 +1,34 @@
+title: DNS Resolution Failure
+id: d57f8d1b-2a40-4553-8d36-57fea605da9b
+name: macos_dns_resolution_failure
+status: experimental
+description: Base rule for the DNS Resolution Failure Spike correlation (rules/correlation/dns_resolution_failure_spike.yml).
+  Matches every logged DNS resolution failure; on its own it fires on each one.
+references:
+- https://attack.mitre.org/techniques/T1568/002/
+author: Eric Brown - Nebulock, Inc.
+date: 2025-10-29
+tags:
+- attack.command-and-control
+- attack.t1568.002
+logsource:
+  product: macos
+  service: unifiedlog
+detection:
+  selection:
+    subsystem: com.apple.network
+    message|contains:
+    - DNS query failed
+    - resolution error
+    - NXDOMAIN
+  condition: selection
+falsepositives:
+- Network connectivity issues
+- DNS server problems
+level: low
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - dns_resolution_failure_spike

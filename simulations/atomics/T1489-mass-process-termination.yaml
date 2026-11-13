@@ -1,0 +1,29 @@
+attack_technique: T1489
+display_name: "Service Stop"
+atomic_tests:
+  - name: Terminate Fifteen Dummy Processes from One Shell (2026 macOS)
+    description: |
+      Simulates mass process termination: one shell starts fifteen /bin/sleep processes and sends each SIGTERM.
+
+      Fidelity limits:
+      - The targets are the simulation's own sleep processes
+
+      Expected telemetry: Fifteen ESF signal events, signal 15, from the same bash process within a few seconds.
+
+      Falcon block status: not blocked (2026-11-12 22:04Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        PIDS=""
+        for i in $(seq 1 15); do /bin/sleep 120 & PIDS="$PIDS $!"; done
+        sleep 1
+        for p in $PIDS; do kill -15 "$p"; done
+        wait || true
+        echo "Mass termination complete"
+      cleanup_command: |
+        pkill -15 -x -f "/bin/sleep 120" >/dev/null 2>&1 || true
+        echo "Cleanup complete"

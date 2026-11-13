@@ -1,0 +1,51 @@
+title: Script Editor Spawns a Shell or Downloader
+id: f57b5d60-d671-443a-84fb-9c566cec599a
+status: experimental
+description: |
+  Detects Script Editor starting a shell, curl or osascript. AppleScript's do shell script runs
+  through /bin/sh, so a script opened from an applescript:// link (the 2026 ClickFix move away from
+  Terminal pastes) that downloads and runs a payload shows up as a shell whose parent is Script
+  Editor. Only the direct parent is checked: the taxonomy has no ancestor or responsible-process
+  field, so a process started further down that tree is not matched.
+references:
+  - https://www.jamf.com/blog/clickfix-macos-script-editor-atomic-stealer/
+  - https://attack.mitre.org/techniques/T1059/002/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_parent:
+    ParentImage: '/System/Applications/Utilities/Script Editor.app/Contents/MacOS/Script Editor'
+  selection_child:
+    Image:
+      - /bin/sh
+      - /bin/bash
+      - /bin/zsh
+      - /bin/dash
+      - /bin/ksh
+      - /bin/csh
+      - /bin/tcsh
+      - /usr/bin/curl
+      - /usr/bin/osascript
+  condition: selection_parent and selection_child
+falsepositives:
+  - In-house AppleScripts that call do shell script, run from Script Editor by their author
+tags:
+  - attack.execution
+  - attack.t1059.002
+level: high
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

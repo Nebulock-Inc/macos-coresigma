@@ -7,28 +7,10 @@ Kibana provides a web-based UI to visualize and explore your macOS telemetry dat
 ### Start Kibana
 
 ```bash
-# Using docker-compose (recommended)
-./scripts/start_services.sh
+./scripts/bench_up.sh elastic
 ```
 
-This starts both Elasticsearch and Kibana via docker-compose.
-
-### Manual Start
-
-If you prefer to start Kibana manually:
-
-```bash
-docker run -d \
-  --name kibana \
-  -p 5601:5601 \
-  -e "ELASTICSEARCH_HOSTS=http://host.docker.internal:9200" \
-  docker.elastic.co/kibana/kibana:8.11.0
-```
-
-**Note**: If Elasticsearch and Kibana are in the same Docker network, use:
-```bash
--e "ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
-```
+This starts Elasticsearch and Kibana 8.19.25 with Docker Compose, waits until both are healthy, and creates the index templates. The `elastic` password is `ELASTIC_PASSWORD` in `.env`. To use your own Kibana instead, set `KIBANA_URL` and `ES_URL` for the scripts.
 
 ## Access Kibana
 
@@ -36,24 +18,13 @@ docker run -d \
 2. **Open browser**: http://localhost:5601
 3. Kibana should automatically connect to Elasticsearch
 
-## Create Index Patterns
+## Create Data Views
 
-Before exploring data, you need to create index patterns:
+```bash
+./scripts/create_kibana_data_view.sh   # macos-telemetry-esf-* and macos-telemetry-ul-*, time field @timestamp
+```
 
-### For ESF Events
-
-1. Go to **Stack Management** → **Index Patterns** (or **Settings** → **Index Patterns`)
-2. Click **Create index pattern**
-3. Index pattern name: `macos-telemetry-esf-*`
-4. Click **Next step**
-5. Time field: Select `@timestamp`
-6. Click **Create index pattern**
-
-### For UL Events
-
-Repeat the same process with:
-- Index pattern: `macos-telemetry-ul-*`
-- Time field: `@timestamp`
+`scripts/create_lens_dashboards_ndjson.py` creates `macos-telemetry-*` (both) for its dashboards if it doesn't exist. To create one by hand: **Stack Management** → **Data Views** → **Create data view**, with `@timestamp` as the time field.
 
 ## Explore Data
 
@@ -63,9 +34,9 @@ Repeat the same process with:
 2. Select your index pattern (macos-telemetry-esf-*)
 3. You should see events with:
    - Timestamp
-   - Event name (exec, fork, create, etc.)
-   - Process information (Image, CommandLine, ProcessId)
-   - Event metadata
+   - `event.action`: the eslogger event name (exec, fork, create, etc.)
+   - Process fields (`process.executable`, `process.command_line`, `process.pid`)
+   - `user.name`, `host.name`
 
 ### Query Examples in Dev Tools
 
@@ -94,13 +65,13 @@ GET macos-telemetry-esf-*/_search
 }
 ```
 
-**Use converted Sigma query:**
+**Use a Lucene query (the shape `sigma convert -t lucene -p macos_esf_ecs` produces):**
 ```json
 GET macos-telemetry-esf-*/_search
 {
   "query": {
     "query_string": {
-      "query": "event.action:exec AND process.executable:(*\\/tmp* OR *\\/var\\/tmp*)"
+      "query": "event.action:exec AND process.executable:(*\\/tmp\\/* OR *\\/var\\/tmp\\/*)"
     }
   },
   "size": 10
@@ -109,7 +80,7 @@ GET macos-telemetry-esf-*/_search
 
 ## Create Visualizations
 
-Pre-built dashboards are available at: http://localhost:5601/app/dashboards
+Generate the coreSigma dashboards with `python3 scripts/create_lens_dashboards_ndjson.py`, or import `exports/all_dashboards_latest.ndjson` (see the README). They appear at http://localhost:5601/app/dashboards.
 
 To create custom visualizations:
 
@@ -139,7 +110,7 @@ To create custom visualizations:
 1. Create new visualization → **Lens**
 2. Data view: **macos-telemetry-esf-***
 3. Configure:
-   - **X-axis**: `process.executable.keyword` (Terms, Top 10)
+   - **X-axis**: `process.executable` (Terms, Top 10)
    - **Y-axis**: Count
    - **Chart type**: Horizontal Bar
 4. Save as: "macOS Top Processes"
@@ -155,17 +126,22 @@ To create custom visualizations:
 
 ## Useful Fields for Filtering
 
-**ECS Fields (recommended):**
-- `event.action` - Event type (exec, fork, create, etc.)
+**ESF documents:**
+- `event.action` - eslogger event name (exec, fork, create, etc.)
+- `event.category`, `event.type` - ECS category and type
 - `process.executable` - Process executable path
 - `process.command_line` - Full command line
-- `process.pid` - Process ID
-- `process.parent.pid` - Parent process ID
-- `process.user.name` - Username
+- `process.pid`, `process.parent.pid` - Process and parent IDs
+- `process.parent.executable` - Parent executable
+- `user.name`, `user.id` - Effective user
+- `file.path` - File path (file events)
 
-**Native ESF Fields:**
-- `esf.event_type` - Numeric ESF event type
-- `esf.event_name` - ESF event name
+**UL documents:**
+- `unified_log.subsystem`, `unified_log.category` - Subsystem and category
+- `message` - Log message
+- `process.executable` - Logging process
+
+All fields: [FIELD_NAME_ORIGINS.md](FIELD_NAME_ORIGINS.md). There are no `esf.*` fields and no `.keyword` subfields.
 
 ## Troubleshooting
 
@@ -178,14 +154,14 @@ docker logs kibana
 
 Verify Elasticsearch is accessible:
 ```bash
-curl -u elastic:changeme http://localhost:9200
+curl -u "elastic:$ES_PASSWORD" http://localhost:9200
 ```
 
 ### "Unable to fetch mapping" error
 
 Make sure you've:
 1. Created the data view correctly
-2. Data view pattern matches actual indices (check with `curl -u elastic:changeme "http://localhost:9200/_cat/indices?v"`)
+2. Data view pattern matches actual indices (check with `curl -u "elastic:$ES_PASSWORD" "http://localhost:9200/_cat/indices?v"`)
 3. Wait a few minutes if indices were just created
 
 ### Kibana is slow
@@ -196,18 +172,12 @@ Make sure you've:
 
 ## Stop/Remove Kibana
 
-```bash
-docker stop kibana
-docker rm kibana
-```
-
-## Using Docker Compose
-
-For easier management, use the provided `docker-compose.yml`:
+From the repository root:
 
 ```bash
-docker-compose up -d
+docker compose stop                # stop the bench, keep its data
+docker compose down -v             # remove the bench and its data volumes
 ```
 
-This starts both Elasticsearch and Kibana together.
+Add `--profile splunk --profile opensearch --profile clickhouse` for the bench services you started with those profiles.
 

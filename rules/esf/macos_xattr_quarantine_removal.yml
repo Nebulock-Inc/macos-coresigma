@@ -1,0 +1,43 @@
+title: Quarantine Attribute Removed with xattr
+id: c99ecf03-0268-4461-af8e-e44022258551
+name: quarantine_removed
+status: experimental
+description: |
+  Detects the xattr command deleting com.apple.quarantine (-d) or clearing every extended
+  attribute (-c) on a file, which skips the Gatekeeper check when the file is opened. 2026 macOS
+  stealer droppers (MacSync, AMOS-lineage second stages) do this before ad-hoc signing and running
+  the payload. Only the xattr command is covered: the taxonomy has no field that tells a
+  deleteextattr event from a setextattr one, so a process calling removexattr() itself is not seen.
+  Base rule for the Gatekeeper-evasion staging correlation.
+references:
+  - https://attack.mitre.org/techniques/T1553/001/
+  - https://securelist.com/macsync-new-version/121383
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_xattr_path:
+    Image: /usr/bin/xattr
+  selection_xattr_signed:
+    SigningID: com.apple.xattr
+  selection_delete:
+    CommandLine|re: '.* -[a-z]*d[a-z]* .*'
+    CommandLine|contains: com.apple.quarantine
+  selection_clear:
+    CommandLine|re: '.* -[a-z]*c[a-z]* .*'
+  condition: 1 of selection_xattr_* and (selection_delete or selection_clear)
+falsepositives:
+  - Developers clearing quarantine on their own builds or on tools they downloaded (xattr -cr App.app)
+  - Homebrew casks installed with --no-quarantine
+  - Admin scripts that unquarantine software before deploying it
+tags:
+  - attack.defense-impairment
+  - attack.t1553.001
+level: medium
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - gatekeeper_evasion_staging

@@ -1,0 +1,37 @@
+attack_technique: T1553.001
+display_name: Gatekeeper Bypass
+atomic_tests:
+  - name: Gatekeeper Quarantine Strip and Ad-Hoc Signing (2026 macOS)
+    description: |
+      Simulates the Gatekeeper bypass chain: apply quarantine xattr to a file,
+      remove it, then ad-hoc codesign the file. This bypasses Gatekeeper's
+      first-launch verification.
+
+      Fidelity limits:
+      - Uses an inert shell script as the payload rather than actual malware
+      - Does not actually execute the payload after signing
+
+      Expected telemetry: setextattr for com.apple.quarantine (both set and delete),
+      codesign exec with ad-hoc signing flags.
+
+      Falcon block status: not blocked (2026-11-11 03:21Z and 03:26Z runs; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        printf '%s\n' '#!/bin/bash' 'echo "Benign test payload"' > /tmp/cs_payload
+        chmod +x /tmp/cs_payload
+        xattr -w com.apple.quarantine "0081;$(date +%s);Safari;" /tmp/cs_payload
+        xattr -l /tmp/cs_payload | grep -q com.apple.quarantine || exit 1
+        xattr -d com.apple.quarantine /tmp/cs_payload
+        if xattr -l /tmp/cs_payload | grep -q com.apple.quarantine; then exit 1; fi
+        codesign -s - -f /tmp/cs_payload
+        codesign -dv /tmp/cs_payload 2>&1 | grep -q "Signature=" || exit 1
+        echo "Gatekeeper bypass chain complete"
+      cleanup_command: |
+        set -e
+        rm -f /tmp/cs_payload
+        echo "Cleanup complete"

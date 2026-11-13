@@ -10,35 +10,40 @@ description: 'Detects installation of configuration profiles which can be used f
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1547/
 - https://attack.mitre.org/techniques/T1556/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: configuration_profile
 detection:
-  selection_event:
-    esf.event_type:
-    - 126  # ES_EVENT_TYPE_NOTIFY_PROFILE_ADD
-    - 127  # ES_EVENT_TYPE_NOTIFY_PROFILE_REMOVE
   selection_root:
     UserId: 0
-  condition: selection_event and not selection_root
+  condition: not selection_root
 falsepositives:
 - MDM (Mobile Device Management) profile installations
 - IT-managed configuration profiles
 - Legitimate user-installed profiles
 - VPN and network configuration profiles
 fields:
-- event_type
-- event_name
 - User
-- profile_identifier
-- profile_uuid
 tags:
 - attack.persistence
 - attack.t1547
 - attack.t1556
 level: medium
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: silent
+      elastic-esql: silent
+      opensearch: silent
+      splunk: silent
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

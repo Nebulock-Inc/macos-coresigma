@@ -91,12 +91,12 @@ def store_in_keychain(service: str, account: str, password: str) -> bool:
             capture_output=True, check=False
         )
         
-        # Add new entry
+        # Add new entry. The password never goes on argv, where `ps` shows it: with -w last, security
+        # prompts for it twice (new + retype), and in a new session (no /dev/tty) it reads them from stdin.
         subprocess.run(
-            ["security", "add-generic-password", 
-             "-s", service, "-a", account, "-w", password],
-            capture_output=True, 
-            check=True
+            ["security", "add-generic-password", "-s", service, "-a", account, "-w"],
+            input=f"{password}\n{password}\n", text=True,
+            capture_output=True, check=True, start_new_session=True
         )
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -175,42 +175,38 @@ def get_elasticsearch_auth(
         "No Elasticsearch authentication configured.\n\n"
         "Configure authentication using one of these methods:\n"
         "  1. Set ES_API_KEY environment variable (recommended)\n"
-        "  2. Store in macOS Keychain:\n"
-        "     security add-generic-password -s 'coreSigma-Elasticsearch' -a 'elastic' -w 'your_password'\n"
+        "  2. Store in macOS Keychain (prompts for the password):\n"
+        "     python3 collectors/auth.py store --username elastic\n"
         "  3. Set ES_USER and ES_PASSWORD environment variables\n"
         "  4. Create config file at ~/.coresigma/config.yml\n"
     )
 
 
-def create_elasticsearch_client(es_url: str = "http://localhost:9200"):
+def cluster_info(es_url: str = "http://localhost:9200") -> Dict[str, Any]:
+    """Elasticsearch's `GET /` reply, authenticated like the collectors (standard library only: no client package).
+
+    Raises AuthenticationError if no credentials are found or Elasticsearch rejects them (401/403).
     """
-    Create an authenticated Elasticsearch client.
-    
-    Args:
-        es_url: Elasticsearch URL
-        
-    Returns:
-        Configured Elasticsearch client
-        
-    Raises:
-        ImportError: If elasticsearch module not installed
-        AuthenticationError: If no valid authentication found
-    """
-    try:
-        from elasticsearch import Elasticsearch
-    except ImportError:
-        raise ImportError(
-            "elasticsearch module not found. Install with: pip install elasticsearch"
-        )
-    
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+
     api_key, basic_auth = get_elasticsearch_auth(es_url)
-    
     if api_key:
-        return Elasticsearch([es_url], api_key=api_key)
+        header = f"ApiKey {api_key}"
     elif basic_auth:
-        return Elasticsearch([es_url], basic_auth=basic_auth)
+        header = "Basic " + base64.b64encode(f"{basic_auth[0]}:{basic_auth[1]}".encode()).decode()
     else:
         raise AuthenticationError("No authentication method available")
+    request = urllib.request.Request(es_url.rstrip("/") + "/", headers={"Authorization": header})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as reply:
+            return json.load(reply)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise AuthenticationError(f"Elasticsearch rejected the credentials (HTTP {e.code})")
+        raise
 
 
 def get_kibana_auth() -> Tuple[str, str]:
@@ -262,7 +258,7 @@ def main():
     # Store command
     store_parser = subparsers.add_parser("store", help="Store credentials in Keychain")
     store_parser.add_argument("--username", "-u", default="elastic", help="Username")
-    store_parser.add_argument("--password", "-p", help="Password (prompted if not provided)")
+    # no --password: argv is visible to every local user; it is prompted for, or read from piped stdin
     
     # Test command
     subparsers.add_parser("test", help="Test current authentication")
@@ -273,10 +269,11 @@ def main():
     args = parser.parse_args()
     
     if args.command == "store":
-        password = args.password
-        if not password:
+        if sys.stdin.isatty():
             import getpass
             password = getpass.getpass("Enter Elasticsearch password: ")
+        else:  # piped, e.g. by setup_credentials.sh
+            password = sys.stdin.readline().rstrip("\n")
         
         if store_in_keychain(KEYCHAIN_SERVICE, args.username, password):
             print(f"Stored credentials for '{args.username}' in macOS Keychain")
@@ -286,8 +283,7 @@ def main():
     
     elif args.command == "test":
         try:
-            client = create_elasticsearch_client()
-            info = client.info()
+            info = cluster_info(os.environ.get("ES_URL", "http://localhost:9200"))
             print(f"Successfully connected to Elasticsearch cluster: {info['cluster_name']}")
         except AuthenticationError as e:
             print(f"Authentication failed: {e}")

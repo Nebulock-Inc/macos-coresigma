@@ -1,0 +1,43 @@
+attack_technique: T1553.002
+display_name: "Subvert Trust Controls: Code Signing"
+atomic_tests:
+  - name: Run a Copy of echo with a Broken Code Signature (2026 macOS)
+    description: |
+      Simulates running a tampered binary: copies the arm64e slice of /bin/echo to a temporary directory, flips one byte of its code so the signature no longer matches, verifies it with codesign and runs it. The kernel kills it during exec.
+
+      Fidelity limits:
+      - The changed byte is the first byte of __text; the kernel kills the process (signal 9) during exec, so the tampered code never runs
+      - Only the copy is changed; /bin/echo is untouched
+      - The cleanup waits up to 10 s for the crash report the kill may leave, and removes it
+
+      Expected telemetry: lipo and codesign execs; a fork that exits on signal 9 with no exec event for the copy; `MacOS error: -67061` (errSecCSSignatureInvalid) from codesign and syspolicyd in the unified log (subsystem com.apple.securityd).
+
+      Falcon block status: not blocked (2026-11-13 04:07Z run; macOS 26.7)
+
+      Prerequisite: Xcode Command Line Tools (`lipo`, `otool`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (lipo, otool)"; exit 1; }
+        D=/tmp/cs_sim_badsig; F="$D/cs_sim_echo"
+        rm -rf "$D" && mkdir -p "$D"
+        lipo /bin/echo -thin arm64e -output "$F"
+        codesign --verify "$F" && echo "copy verifies"
+        O=$(otool -l "$F" | awk '/sectname __text/{f=1} f && $1=="offset"{print $2; exit}')
+        B=$(xxd -s "$O" -l 1 -p "$F")
+        printf "\\x$(printf %02x $(( 0x$B ^ 0xff )))" | dd of="$F" bs=1 seek="$O" conv=notrunc 2>/dev/null
+        codesign --verify --verbose=2 "$F" 2>&1 || echo "codesign verify failed (rc=$?)"
+        "$F" coresigma-sim || echo "tampered copy rejected (rc=$?)"
+        echo "Tampered binary run complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_badsig
+        # the kill can leave a crash report, written a few seconds later
+        R=~/Library/Logs/DiagnosticReports
+        for i in 1 2 3 4 5 6 7 8 9 10; do ls "$R"/cs_sim_echo* >/dev/null 2>&1 && break; sleep 1; done
+        rm -f "$R"/cs_sim_echo*
+        echo "Cleanup complete"

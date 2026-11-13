@@ -1,0 +1,62 @@
+title: Apple-Named User Agent Loaded, Keychain Partition List Changed or BTM Agent Killed
+id: f797f399-3dcf-4218-8ab8-07d5e7f9a871
+name: apple_named_launchagent_or_partition_list_or_btm_kill
+status: experimental
+description: |
+  Base rule for the Gatekeeper-evasion staging correlation, matching its last step as a process
+  start: launchctl loading a com.apple.* plist from a user's ~/Library/LaunchAgents (Apple ships
+  none there), security changing a keychain partition list, or killall/pkill stopping the
+  Background Task Management agent. A Sigma rule has one log source, so the plist creation and a
+  signal sent without killall or pkill are left to their own rules.
+references:
+  - https://securelist.com/macsync-new-version/121383
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_launchctl:
+    - Image: /bin/launchctl
+    - SigningID: com.apple.xpc.launchctl
+  selection_load:
+    CommandLine|contains:
+      - ' load '
+      - ' bootstrap '
+  selection_apple_user_agent:
+    CommandLine|contains|all:
+      - ' /Users/'
+      - /Library/LaunchAgents/com.apple.
+  selection_security:
+    - Image: /usr/bin/security
+    - SigningID: com.apple.security
+  selection_partition_list:
+    CommandLine|contains:
+      - set-generic-password-partition-list
+      - set-internet-password-partition-list
+      - set-key-partition-list
+  selection_killer:
+    - Image:
+        - /usr/bin/killall
+        - /usr/bin/pkill
+    - SigningID:
+        - com.apple.killall
+        - com.apple.pgrep
+  selection_btm_agent:
+    CommandLine|contains: BackgroundTaskManagement
+  condition: (selection_launchctl and selection_load and selection_apple_user_agent) or (selection_security and selection_partition_list) or (selection_killer and selection_btm_agent)
+falsepositives:
+  - CI runners importing a code-signing key with set-key-partition-list
+tags:
+  - attack.persistence
+  - attack.t1543.001
+  - attack.credential-access
+  - attack.t1555.001
+  - attack.defense-impairment
+  - attack.t1685
+level: low
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - gatekeeper_evasion_staging

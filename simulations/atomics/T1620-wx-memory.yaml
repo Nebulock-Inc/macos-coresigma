@@ -1,0 +1,38 @@
+attack_technique: T1620
+display_name: Reflective Code Loading
+atomic_tests:
+  - name: Writable and Executable Memory Request (2026 macOS)
+    description: |
+      Simulates a loader preparing memory for in-memory code: a compiled stub maps a
+      MAP_JIT region and an anonymous read-write region, and asks mprotect to make each
+      readable, writable and executable. Nothing is written to or run from either region.
+
+      Fidelity limits:
+      - Apple silicon enforces W^X, so the kernel refuses the RWX mprotect calls; Endpoint
+        Security still reports each request (protection 7), which is what the rule reads
+      - The stub is a cc-compiled binary (ad-hoc, linker-signed) in /tmp, not a real loader,
+        and holds no shellcode
+
+      Expected telemetry: cc/ld execs creating /tmp/cs_wx/cs_wx_stub, its exec, and ESF
+      mprotect events from it with protection 7 (PROT_READ|PROT_WRITE|PROT_EXEC).
+
+      Falcon block status: not blocked (2026-11-12 15:09Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        rm -rf /tmp/cs_wx && mkdir -p /tmp/cs_wx
+        printf '%s\n' '#include <stdio.h>' '#include <sys/mman.h>' 'int main(void) {' '  size_t n = 16384;' '  void *j = mmap(NULL, n, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);' '  void *p = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);' '  int rj = j == MAP_FAILED ? -2 : mprotect(j, n, PROT_READ | PROT_WRITE | PROT_EXEC);' '  int rp = p == MAP_FAILED ? -2 : mprotect(p, n, PROT_READ | PROT_WRITE | PROT_EXEC);' '  printf("mprotect RWX: jit region %d, anonymous region %d\n", rj, rp);' '  return 0;' '}' > /tmp/cs_wx/wx.c
+        cc -o /tmp/cs_wx/cs_wx_stub /tmp/cs_wx/wx.c
+        /tmp/cs_wx/cs_wx_stub
+        echo "W+X memory request complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_wx
+        echo "Cleanup complete"

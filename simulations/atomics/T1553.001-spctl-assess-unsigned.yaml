@@ -1,0 +1,34 @@
+attack_technique: T1553.001
+display_name: "Subvert Trust Controls: Gatekeeper Bypass"
+atomic_tests:
+  - name: Gatekeeper Assessment of an Unsigned Binary (2026 macOS)
+    description: |
+      Simulates a Gatekeeper check that fails: builds a binary, strips its signature and asks spctl to assess it.
+
+      Fidelity limits:
+      - The binary is a cc-compiled stub that is never run; spctl only assesses it
+
+      Expected telemetry: codesign and spctl execs; syspolicyd's assessment lines in the unified log.
+
+      Falcon block status: not blocked (2026-11-12 22:14Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        D=/tmp/cs_sim_spctl
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' 'int main(void) { return 0; }' > "$D/stub.c"
+        cc -o "$D/cs_unsigned_stub" "$D/stub.c"
+        codesign --remove-signature "$D/cs_unsigned_stub"
+        /usr/sbin/spctl --assess --type execute -vv "$D/cs_unsigned_stub" || true
+        echo "Assessment complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_spctl
+        echo "Cleanup complete"

@@ -14,18 +14,17 @@ description: 'Detects modifications to the TCC (Transparency, Consent, and Contr
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
-- https://attack.mitre.org/techniques/T1562/001/
-- https://attack.mitre.org/techniques/T1222/
+- https://attack.mitre.org/techniques/T1548/006/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: tcc_modification
 detection:
   selection:
-    esf.event_type: 147
-    event.action: tcc_modify
+    # every ESF event has an acting process: the category does the scoping
+    Image|startswith: /
   condition: selection
 falsepositives:
 - System updates and installations
@@ -33,15 +32,28 @@ falsepositives:
 - Legitimate applications requesting permissions
 - User-initiated permission changes (rare to see at this level)
 fields:
-- event_type
-- event_name
 - ProcessId
 - Image
 - User
-- service
-- client
+- TccService
+- TccIdentity
+- TccRight
+- TccReason
+- InstigatorImage
 tags:
-- attack.defense_evasion
-- attack.t1562.001
-- attack.t1222
+- attack.privilege-escalation
+- attack.t1548.006
 level: critical
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: silent
+      elastic-esql: silent
+      opensearch: silent
+      splunk: silent
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

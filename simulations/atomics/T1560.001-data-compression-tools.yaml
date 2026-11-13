@@ -1,0 +1,32 @@
+attack_technique: T1560.001
+display_name: "Archive via Utility"
+atomic_tests:
+  - name: Archive a Dummy Directory with zip and tar (2026 macOS)
+    description: |
+      Simulates staging data for exfiltration: zips and tars a directory of three dummy text files.
+
+      Fidelity limits:
+      - The directory holds only generated dummy text, in /tmp/cs_sim_compress
+
+      Expected telemetry: /usr/bin/zip and /usr/bin/tar execs whose arguments name /tmp/cs_sim_compress.
+
+      Falcon block status: not blocked (2026-11-12 21:25Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_compress
+        rm -rf "$D" && mkdir -p "$D/data"
+        for i in 1 2 3; do printf 'coresigma simulation dummy file %s\n' "$i" > "$D/data/file$i.txt"; done
+        cd "$D"
+        /usr/bin/zip -q -r "$D/data.zip" data
+        /usr/bin/tar -czf "$D/data.tar.gz" data
+        ls -l "$D"
+        echo "Archive step complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_compress
+        echo "Cleanup complete"

@@ -9,18 +9,15 @@ description: 'Detects execution of HTTP tools with upload methods (PUT, POST, --
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1041/
 - https://attack.mitre.org/techniques/T1567/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /curl
@@ -33,7 +30,7 @@ detection:
     - -X POST
     - --data
     - --data-binary
-  condition: selection_event and selection_process and selection_upload
+  condition: selection_process and selection_upload
 falsepositives:
 - Legitimate API interactions and data submissions
 - Software updates and telemetry uploads
@@ -50,3 +47,16 @@ tags:
 - attack.t1041
 - attack.t1567
 level: medium
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: silent
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

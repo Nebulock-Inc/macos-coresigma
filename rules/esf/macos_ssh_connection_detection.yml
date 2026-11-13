@@ -1,5 +1,5 @@
 title: macOS SSH Connection Detection
-id: a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
+id: 336e30d8-4ced-44db-8c78-abb0b1ad13bb
 status: experimental
 description: 'Detects execution of SSH client or SSH daemon processes which may indicate
 
@@ -9,23 +9,32 @@ description: 'Detects execution of SSH client or SSH daemon processes which may 
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
-- https://attack.mitre.org/techniques/T1078/004/
+- https://attack.mitre.org/techniques/T1078/
 - https://attack.mitre.org/techniques/T1021/004/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_process:
     Image|endswith:
     - /ssh
     - /sshd
-  condition: selection_event and selection_process
+    - /sshd-session
+  # sshd -t / -T only tests or prints the configuration and exits: no connection (ssh -t is the client's tty flag)
+  filter_sshd_config_test_last:
+    Image|endswith: /sshd
+    CommandLine|endswith:
+    - ' -t'
+    - ' -T'
+  filter_sshd_config_test_flag:
+    Image|endswith: /sshd
+    CommandLine|contains:
+    - ' -t '
+    - ' -T '
+  condition: selection_process and not 1 of filter_sshd_config_test_*
 falsepositives:
 - Legitimate SSH usage by administrators
 - Automated scripts using SSH for remote management
@@ -37,8 +46,21 @@ fields:
 - ParentProcessId
 - User
 tags:
-- attack.initial_access
-- attack.t1078.004
-- attack.lateral_movement
+- attack.initial-access
+- attack.t1078
+- attack.lateral-movement
 - attack.t1021.004
 level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fires
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

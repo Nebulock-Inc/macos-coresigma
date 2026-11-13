@@ -1,5 +1,5 @@
 title: macOS TCC Privacy Bypass Attempt
-id: a1b2c3d4-e5f6-4789-abcd-ef0123456789
+id: 2d942254-d897-4724-9833-1d6570711ecc
 status: experimental
 description: |
   Detects potential attempts to bypass macOS Transparency, Consent, and Control (TCC)
@@ -10,14 +10,13 @@ references:
   - https://developer.apple.com/documentation/security/tcc
   - https://objective-see.org/blog/blog_0x6C.html
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/22
-modified: 2025/01/22
+date: 2025-01-22
+modified: 2026-11-11
 logsource:
   product: macos
   service: unifiedlog
+  category: tcc
 detection:
-  selection_subsystem:
-    subsystem: com.apple.TCC
   selection_bypass_indicators:
     message|contains:
       - 'access denied'
@@ -33,12 +32,24 @@ detection:
     message|contains:
       - 'User approved'
       - 'granted'
-  condition: selection_subsystem and selection_bypass_indicators and not filter_normal_prompts
+  condition: selection_bypass_indicators and not filter_normal_prompts
 falsepositives:
   - Legitimate applications requesting sensitive permissions
   - First-time application launches requesting access
 level: high
 tags:
-  - attack.privilege_escalation
-  - attack.defense_evasion
+  - attack.privilege-escalation
   - attack.t1548
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

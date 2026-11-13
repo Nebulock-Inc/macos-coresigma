@@ -12,40 +12,47 @@ description: 'Detects setuid or setgid operations that transition to root (UID 0
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1548/001/
 - https://attack.mitre.org/techniques/T1068/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: privilege_change
 detection:
-  selection_setuid:
-    esf.event_type: 24
-    event.action: setuid
-  selection_setgid:
-    esf.event_type: 25
-    event.action: setgid
-  selection_to_root:
+  selection_setuid_to_root:
     TargetUserId: 0
+  selection_setgid_to_wheel:
+    TargetGroupId: 0
   selection_root_source:
     UserId: 0
-  condition: (selection_setuid or selection_setgid) and selection_to_root and not selection_root_source
+  condition: (selection_setuid_to_root or selection_setgid_to_wheel) and not selection_root_source
 falsepositives:
 - Legitimate system utilities and services
 - Software installation and updates
 - Authorized administrative tools
 fields:
-- event_type
-- event_name
 - ProcessId
 - User
 - UserId
-- TargetUser
 - TargetUserId
+- TargetGroupId
 tags:
-- attack.privilege_escalation
+- attack.privilege-escalation
 - attack.t1548.001
 - attack.t1068
 level: high
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

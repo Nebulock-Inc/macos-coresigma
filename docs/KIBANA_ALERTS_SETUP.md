@@ -1,179 +1,59 @@
-# Kibana Alerts Setup Guide
+# Kibana Alerts Setup
 
-## Two Approaches to Alerts
+`scripts/deploy_sigma_rules.py` turns the Sigma rules into Kibana detection rules (Elastic Security). They work with the free Basic license.
 
-There are two ways to set up alerts for Sigma rules in Kibana:
+## Deploy
 
-### 1. Saved Searches (Recommended - No Permissions Required) ✅
-**Pros:**
-- No Elastic Security/Detection Engine required
-- No special permissions needed
-- Easy to create and use
-- Can be converted to alerts via Rules and Connectors
-
-**Cons:**
-- Not as feature-rich as Detection Engine
-- Requires manual alert rule creation
-
-### 2. Detection Engine (Elastic Security) ⚠️
-**Pros:**
-- Advanced threat detection features
-- Built-in correlation and investigation tools
-- Automated alert management
-
-**Cons:**
-- Requires Elastic Security license/configuration
-- Requires special permissions
-- More complex setup
-
----
-
-## Current Status: Saved Searches Approach
-
-We've already created saved searches for all Sigma rules. These work **without** Detection Engine permissions.
-
-### View Saved Searches
-
-1. **In Kibana Discover:**
-   - Go to: `http://localhost:5601/app/discover`
-   - Click "Open" → Select a saved search
-   - You'll see searches like:
-     - "Sigma Alert: Suspicious Process Execution (ESF)"
-     - "Sigma Alert: File Creation Persistence (ESF)"
-     - "Critical: Code Signature Invalidation (ESF)"
-     - "Sigma Alert: Unusual TCC Access (UL)"
-     - "Sigma Alert: Sudo Command Execution (UL)"
-
-2. **Run the script to list all:**
-   ```bash
-   curl -s -u elastic:changeme "http://localhost:5601/api/saved_objects/_find?type=search&search=Sigma" \
-     -H 'kbn-xsrf: true' | python3 -m json.tool
-   ```
-
-### Convert Saved Searches to Alerts
-
-1. Go to: **Stack Management → Rules and Connectors → Rules**
-2. Click **"Create rule"**
-3. Select **"Elasticsearch query"**
-4. Configure:
-   - **Index:** `macos-telemetry-esf-*` or `macos-telemetry-ul-*`
-   - **Query:** Copy the KQL query from a saved search
-   - **Schedule:** Every 5 minutes
-   - **Actions:** Add email/Slack/webhook connector
-
----
-
-## Fixing "Detection Engine Permissions" Error
-
-### Option 1: Use Saved Searches (Recommended)
-
-**The saved searches we created work without Detection Engine!**
-
-- Go to **Discover** instead of **Security** or **Detections**
-- Open a saved search
-- No permissions required ✅
-
-### Option 2: Enable Detection Engine (If You Want It)
-
-Detection Engine requires Elastic Security, which needs:
-
-1. **Elastic Security License** (Free tier available but limited)
-2. **Elastic Security Plugin** enabled
-3. **Proper user roles** with detection permissions
-
-**To check if available:**
 ```bash
-curl -s -u elastic:changeme "http://localhost:5601/api/features" -H 'kbn-xsrf: true' | \
-  python3 -c "import sys, json; features = json.load(sys.stdin).get('features', []); \
-  security = [f for f in features if 'security' in f.get('id', '').lower()]; \
-  print('Security features:', [f.get('id') for f in security[:5]])"
+python3 scripts/deploy_sigma_rules.py            # create or update the rules, disabled
+python3 scripts/deploy_sigma_rules.py --enable   # and enable them
+python3 scripts/deploy_sigma_rules.py --dry-run  # show what it would do
 ```
 
-**If Elastic Security is not available:**
-- Use saved searches (already set up ✅)
-- Or install Elastic Security (requires license/setup)
+What each rule gets:
 
----
+- **Query**: EQL from `macos_esf_ecs` + `macos_ul_ecs`, on `macos-telemetry-esf-*` or `macos-telemetry-ul-*`. Correlations: see below.
+- **Schedule**: every 5 minutes, looking back 6 minutes. Rules alert on new events, not on history that was indexed before they ran.
+- **Severity and risk score**: from the Sigma `level`. At most 100 alerts per run.
+- **MITRE ATT&CK**: from the rule's ATT&CK tags; each technique is filed under its own tactics in pySigma's ATT&CK data.
+- **Tags**: `macos`, `sigma`, and `esf` or `unified-logging`.
+- **Rule ID**: `coresigma-<file name>` (`coresigma-ul-<file name>` for UL rules). A redeploy updates the rule with the same ID and keeps whether it's enabled.
 
-## Fixing "undefined: undefined" Error
+Correlations deploy too, tagged `correlation`, on their base rules' indices:
 
-This error usually means:
-1. A broken data view reference
-2. An attempt to access Detection Engine endpoints that don't exist
-3. A missing index pattern
+- **`temporal_ordered`** (Paste-to-Stealer Chain, Gatekeeper Evasion Staging): an EQL rule with an EQL `sequence by <group-by> with maxspan=<timespan>`, one step per base rule in order. It alerts only when the steps happen in that order.
+- **`temporal`, `event_count`, `value_count`** (the other five): an ES|QL rule, from pysigma-backend-elasticsearch's ES|QL backend. ES|QL counts in fixed `date_trunc` windows of the timespan, so a chain that crosses a window boundary is missed, and it matches plain strings case-sensitively.
+- **Schedule**: every 5 minutes, looking back the timespan plus 6 minutes, so a chain that ends in a run's window is whole. An EQL sequence's alert is deduplicated across runs (Kibana derives its id from the events; on the bench, re-runs over the same chain added no alert).
+- **One alert per window (ES|QL)**: an ES|QL correlation's alert has no source event, so Kibana would give it a new id, and alert again, on every run whose look-back holds the window. So each ES|QL rule ends with `| where timebucket > now() - <timespan + 360> seconds and timebucket <= now() - <timespan + 60> seconds`: a run alerts only on the windows that closed 1 to 6 minutes before it, and consecutive runs 5 minutes apart take each window once. The cost is delay: an alert can come up to timespan + 6 minutes after its window opened (36 minutes for the 30-minute Package Manager Payload to Persistence). The numbers assume the 5-minute interval: if you change a rule's interval, change the band's width (360 − 60 = 300 seconds) to match, or windows alert twice or are skipped. A run that starts late or early can skip or repeat a window; on the bench, runs started within about 20 ms of their schedule.
+- **Alerts**: an EQL sequence gives one alert plus a building-block alert per step; each step's `kibana.alert.original_time` is its event's time. An ES|QL correlation's alert has no `original_time`: it carries the group-by fields, the count, and `timebucket`, the start of its fixed window.
 
-### Solution:
+Base rules deploy only inside their correlation, so they don't appear on their own.
 
-1. **Hard refresh browser:**
-   - Mac: `Cmd + Shift + R`
-   - Windows/Linux: `Ctrl + Shift + R`
+## View alerts
 
-2. **Delete and recreate data views:**
-   - Go to: Kibana → Stack Management → Data Views
-   - Delete any broken `macos-telemetry-*` data views
-   - Create fresh data views with `@timestamp` as the time field
+- **Security → Alerts** lists them.
+- **Security → Rules → Detection rules** shows each rule, filterable by the `sigma` tag, with its last run's status and errors.
+- The **Sigma Rule Triggers Overview** dashboard in `exports/all_dashboards_latest.ndjson` charts `.alerts-security.alerts-default`.
 
-3. **Use Discover instead of Security/Detections:**
-   - Go to: `http://localhost:5601/app/discover`
-   - Select a saved search (no Detection Engine needed)
-
-4. **If using Detection Engine is required:**
-   - Make sure Elastic Security is properly configured
-   - Check user has `detections_user` or `detections_admin` role
-
----
-
-## Quick Reference
-
-### View Alerts (Saved Searches)
-```bash
-# List all saved searches
-curl -s -u elastic:changeme "http://localhost:5601/api/saved_objects/_find?type=search&per_page=20" \
-  -H 'kbn-xsrf: true' | python3 -m json.tool | grep -A 3 "Sigma"
-```
-
-### Test a Query
-```bash
-# Test ESF query
-curl -s -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_search?q=event.action:exec&size=1&pretty"
-
-# Test UL query
-curl -s -u elastic:changeme "http://localhost:9200/macos-telemetry-ul-*/_search?q=ul.subsystem:com.apple.sudo&size=1&pretty"
-```
-
-**Note**: If you've set up credentials in Keychain using `./scripts/setup_credentials.sh`, you can omit `-u elastic:changeme` from curl commands by using environment variables or the auth helper.
-
----
-
-## Recommended Workflow
-
-**For most users (no Detection Engine):**
-1. ✅ Use saved searches (already created)
-2. ✅ View in Discover
-3. ✅ Create alert rules from saved searches (Rules and Connectors)
-4. ✅ Configure email/Slack notifications
-
-**For advanced users (with Detection Engine):**
-1. Enable Elastic Security
-2. Import Sigma rules as Detection Engine rules
-3. Use Security dashboard for correlation
-
----
+Notifications are rule actions (edit a rule → **Actions**); which connectors you can use depends on your license.
 
 ## Troubleshooting
 
+### A rule fails to deploy
+
+The script prints `FAIL` with Kibana's reason. A query Elasticsearch rejects at run time shows as a failed run on the rule's page; the support matrix lists which rules convert for Elastic EQL.
+
 ### "Detection engine permissions required"
-→ Use saved searches instead (Discover → Open saved search)
 
-### "undefined: undefined"
-→ Delete and recreate data views in Stack Management → Data Views
-→ Hard refresh browser (Cmd+Shift+R)
+The user needs Elastic Security privileges (the bench's `elastic` user has them). With your own cluster, give the user a role with the Security feature, and make sure the `.alerts-security.alerts-default` index can be created.
 
-### No data in saved searches
-→ Check time range in Discover (set to "Last 7 days")
-→ Verify events exist: `curl -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"`
+### No alerts
 
-### Saved searches show errors
-→ Recreate data views in Stack Management → Data Views
-→ Hard refresh browser
+- Are the rules enabled? (`--enable`, or the toggle on the rule list)
+- Are events arriving? `curl -s -u "elastic:$ES_PASSWORD" "http://localhost:9200/macos-telemetry-esf-*/_count?pretty"`
+- Rules look back 6 minutes (correlations: their timespan more): events older than that when the rule first runs won't alert. To run them over older data, raise the look-back (bulk edit, **Update rule schedules**; Kibana takes hours, e.g. `72h`, not days). An ES|QL correlation also needs its last `| where timebucket ...` line removed: it alerts only on windows that closed in the last few minutes.
+- Check the rule's status in the [support matrix](SUPPORT_MATRIX.md): many rules are not-verified, with the reason.
 
+### Rules from 1.x are still there
+
+Kibana keeps rules whose files were removed or turned into correlations in 2.0. The [changelog](../CHANGELOG.md) lists their IDs; delete them in **Security → Rules**.

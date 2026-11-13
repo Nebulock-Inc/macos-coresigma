@@ -1,0 +1,32 @@
+title: Osascript Securityd Log Line
+id: 949282d5-516c-4f60-928c-8bbb538c0df9
+name: osascript_securityd_log
+status: experimental
+description: |
+  Base rule for the Fake Password Prompt Then Keychain Activity correlation
+  (rules/correlation/hidden_prompt_keychain_activity.yml): any com.apple.securityd unified log line logged
+  by osascript. Security.framework logs one ("Enabling System Keychain Always due to platform") when a
+  process first uses it, so on its own this says only that osascript loaded the keychain subsystem.
+references:
+  - https://attack.mitre.org/techniques/T1056/002/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  service: unifiedlog
+  category: securityd
+detection:
+  selection:
+    Image|endswith: /osascript
+  condition: selection
+falsepositives:
+  - Any AppleScript run through osascript that uses Security.framework
+tags:
+  - attack.execution
+  - attack.t1059.002
+level: low
+custom:
+  coresigma:
+    status: base
+    base_of:
+      - hidden_prompt_keychain_activity

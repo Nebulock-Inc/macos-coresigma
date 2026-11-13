@@ -1,0 +1,9 @@
+[
+  {"name": "Sim A", "start": "2026-01-02T00:00:00Z", "end": "2026-01-02T00:00:10Z"},
+  {"name": "Sim A", "start": "2026-01-02T00:10:00Z", "end": "2026-01-02T00:10:10Z", "status": "timeout"},
+  {"name": "Sim B", "start": "2026-01-02T00:20:00Z", "end": "2026-01-02T00:20:10Z", "status": "error"},
+  {"name": "Sim B", "start": "2026-01-02T00:30:00Z", "end": "2026-01-02T00:30:10Z", "status": "success"},
+  {"name": "idle (capture)", "start": "2026-01-02T01:00:00Z", "end": "2026-01-02T07:00:00Z", "status": "complete"},
+  {"name": "idle (next)", "start": "2026-01-03T01:00:00Z", "end": "2026-01-03T07:00:00Z", "status": "planned"},
+  {"name": "Sim B", "start": "2026-01-03T08:00:00Z", "end": "2026-01-03T08:00:10Z", "status": "retest"}
+]

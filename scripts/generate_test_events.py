@@ -52,7 +52,7 @@ def main():
     
     # 3. Curl/wget downloads
     print("\n[3] Network Download Tools")
-    print("    Rule: macos_esf_suspicious_curl_download.yml")
+    print("    Rule: macos_http_tools_with_protocol_indicators.yml")
     run_cmd("curl -s -o /dev/null https://example.com", "curl https://example.com")
     run_cmd("curl -s -o /dev/null http://example.com", "curl http://example.com")
     

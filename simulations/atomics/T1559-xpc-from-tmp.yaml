@@ -1,0 +1,33 @@
+attack_technique: T1559
+display_name: "Inter-Process Communication"
+atomic_tests:
+  - name: XPC Connection from a Binary in /tmp (2026 macOS)
+    description: |
+      Simulates a dropped binary talking to system services: a compiled stub run from /tmp looks up the current user, which makes an XPC connection to opendirectoryd.
+
+      Fidelity limits:
+      - The stub is a cc-compiled binary (ad-hoc, linker-signed) that only calls getpwuid()
+
+      Expected telemetry: cc/ld execs, the stub's exec, and an ESF xpc_connect from /private/tmp/cs_sim_xpc/cs_xpc_stub (service com.apple.system.opendirectoryd.libinfo).
+
+      Falcon block status: not blocked (2026-11-12 21:55Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Xcode Command Line Tools (`cc`). The Amazon macOS AMI has them; MacStadium images don't.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        xcode-select -p >/dev/null 2>&1 || { echo "prereq missing: Xcode Command Line Tools (cc)"; exit 1; }
+        D=/tmp/cs_sim_xpc
+        rm -rf "$D" && mkdir -p "$D"
+        printf '%s\n' '#include <pwd.h>' '#include <stdio.h>' '#include <unistd.h>' 'int main(void) {' '  struct passwd *p = getpwuid(getuid());' '  printf("user: %s\n", p ? p->pw_name : "?");' '  return 0;' '}' > "$D/stub.c"
+        cc -o "$D/cs_xpc_stub" "$D/stub.c"
+        "$D/cs_xpc_stub"
+        echo "XPC lookup complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_xpc
+        echo "Cleanup complete"

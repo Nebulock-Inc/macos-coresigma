@@ -1,0 +1,33 @@
+attack_technique: T1567.002
+display_name: "Exfiltration to Cloud Storage"
+atomic_tests:
+  - name: Cloud Storage Copy Dry Run with the AWS CLI (2026 macOS)
+    description: |
+      Simulates exfiltration to cloud storage with a cloud CLI: `aws s3 cp --dryrun` of a marker file to a placeholder bucket.
+
+      Fidelity limits:
+      - --dryrun: the CLI only prints what it would upload; nothing is sent and the bucket is a placeholder
+      - The command line carries the marker path /tmp/cs_sim_cloud/coresigma-sim-marker.txt and --dryrun, which tell it apart from any other aws s3 cp on the host
+
+      Expected telemetry: aws exec (AWS CLI v2: /usr/local/aws-cli/aws) with `s3 cp --dryrun` and the marker path.
+
+      Falcon block status: not blocked (2026-11-12 21:39Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: AWS CLI v2 (`aws`) installed.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        AWS=/usr/local/bin/aws; [ -x "$AWS" ] || AWS=$(command -v aws) || { echo "prereq missing: aws"; exit 1; }
+        D=/tmp/cs_sim_cloud
+        rm -rf "$D" && mkdir -p "$D"
+        printf 'coresigma simulation marker\n' > "$D/coresigma-sim-marker.txt"
+        "$AWS" s3 cp --dryrun "$D/coresigma-sim-marker.txt" s3://coresigma-sim-placeholder/coresigma-sim-marker.txt --region us-east-1 || true
+        echo "Cloud storage dry run complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_cloud
+        echo "Cleanup complete"

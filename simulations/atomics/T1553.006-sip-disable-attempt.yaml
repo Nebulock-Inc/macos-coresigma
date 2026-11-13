@@ -1,0 +1,37 @@
+attack_technique: T1553.006
+display_name: "Subvert Trust Controls: Code Signing Policy Modification"
+atomic_tests:
+  - name: Refused csrutil disable Outside Recovery (2026 macOS)
+    description: |
+      Simulates an attempt to turn off System Integrity Protection: runs `csrutil disable`, as the user and as root, outside recoveryOS, where csrutil refuses to change anything.
+
+      Fidelity limits:
+      - csrutil refuses outside recoveryOS, so SIP never changes; the atomic checks `csrutil status` before and after and fails if it differs
+      - Never runs `csrutil enable` or `csrutil clear`, and nothing runs in recoveryOS
+      - stdin is /dev/null, so a prompt for credentials can't hang the run
+
+      Expected telemetry: csrutil execs, as the user and through sudo. On macOS 26.7 the refusal leaves no line in the syspolicy subsystems or from syspolicyd.
+
+      Falcon block status: not blocked (2026-11-13 04:05Z run; macOS 26.7)
+
+      Prerequisite: passwordless sudo for the user.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        sudo -n true 2>/dev/null || { echo "prereq missing: passwordless sudo"; exit 1; }
+        D=/tmp/cs_sim_sip
+        rm -rf "$D" && mkdir -p "$D"
+        csrutil status | tee "$D/status.before"
+        csrutil disable </dev/null 2>&1 || echo "csrutil disable refused (rc=$?)"
+        sudo -n csrutil disable </dev/null 2>&1 || echo "sudo csrutil disable refused (rc=$?)"
+        csrutil status > "$D/status.after"
+        cmp -s "$D/status.before" "$D/status.after" || { echo "SIP status changed: $(cat "$D/status.after")"; exit 1; }
+        echo "SIP attempt complete; status unchanged"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_sip
+        echo "Cleanup complete"

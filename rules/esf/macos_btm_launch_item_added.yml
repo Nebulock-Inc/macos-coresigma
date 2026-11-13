@@ -1,0 +1,55 @@
+title: Launch Agent or Daemon Registered from a User or Temporary Location
+id: 4fa47816-b602-439d-a274-adcbdf19e6fc
+status: experimental
+description: |
+  Detects Background Task Management registering a launch agent or launch daemon whose program is
+  in a home directory, a temporary directory or /Library/Caches. 2026 stealers and droppers
+  (AMOS-lineage backdoors, MiniRAT, the Axios npm dropper) persist this way, usually with an
+  Apple-looking label. The event fires for a plist written by hand as well as one registered through
+  SMAppService. The program path is the first program argument, so an agent that runs /bin/bash with
+  a script argument is not matched here; the launch persistence file rules cover the plist itself.
+references:
+  - https://attack.mitre.org/techniques/T1543/004/
+  - https://www.huntress.com/blog/supply-chain-compromise-axios-npm-package
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: background_task
+detection:
+  selection_type:
+    BtmItemType:
+      - 3  # agent
+      - 4  # daemon
+  selection_location:
+    BtmExecutable|startswith:
+      - /Users/
+      - /tmp/
+      - /private/tmp/
+      - /var/tmp/
+      - /private/var/tmp/
+      - /var/folders/
+      - /private/var/folders/
+      - /Library/Caches/
+  condition: selection_type and selection_location
+falsepositives:
+  - Per-user updaters and tool managers that run from ~/Library/Application Support (Google Updater, JetBrains Toolbox)
+  - Developer tools installed in the home directory that register their own agent
+tags:
+  - attack.persistence
+  - attack.t1543.001
+  - attack.t1543.004
+level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

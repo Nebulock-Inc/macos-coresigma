@@ -7,18 +7,15 @@ references:
 - https://attack.mitre.org/techniques/T1014/
 - https://www.sentinelone.com/labs/20-common-tools-techniques-used-by-macos-threat-actors-malware/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/29
+date: 2025-10-29
 tags:
-- attack.defense_evasion
+- attack.stealth
 - attack.t1014
 logsource:
   product: macos
-  service: endpointsecurity
-  category: kernel_extension
+  category: driver_load
 detection:
   selection:
-    esf.event_type: 17
-    event.action: kextload
     KextIdentifier|contains:
     - rootkit
     - backdoor
@@ -32,4 +29,17 @@ detection:
 falsepositives:
 - Development and testing kexts
 level: high
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: silent
+      elastic-esql: silent
+      opensearch: silent
+      splunk: silent
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

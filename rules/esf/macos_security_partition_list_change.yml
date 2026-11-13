@@ -1,0 +1,45 @@
+title: Keychain Partition List Changed with security
+id: 36d59b69-1404-435e-a5fe-5ee531459712
+status: experimental
+description: |
+  Detects the security command changing a keychain item's partition list, which decides which
+  code-signing identities may read the item without a prompt. MacSync (2026) widens it with the
+  captured login password so it can read saved passwords silently.
+references:
+  - https://securelist.com/macsync-new-version/121383
+  - https://attack.mitre.org/techniques/T1555/001/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_security_path:
+    Image: /usr/bin/security
+  selection_security_signed:
+    SigningID: com.apple.security
+  selection_partition_list:
+    CommandLine|contains:
+      - set-generic-password-partition-list
+      - set-internet-password-partition-list
+      - set-key-partition-list
+  condition: 1 of selection_security_* and selection_partition_list
+falsepositives:
+  - CI runners and build scripts importing a code-signing key with set-key-partition-list (fastlane, GitHub Actions)
+tags:
+  - attack.credential-access
+  - attack.t1555.001
+level: high
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

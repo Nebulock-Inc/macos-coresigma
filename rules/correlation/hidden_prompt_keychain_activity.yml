@@ -1,0 +1,50 @@
+title: Fake Password Prompt Then Keychain Activity in the Same Process
+id: ce954ca1-5767-4d89-933a-fac087b30c35
+status: experimental
+description: |
+  Detects osascript showing a dialog with a hidden answer field (AppleScript or JXA), the fake password prompt of AMOS-lineage
+  stealers, and the same osascript process (same host, pid and executable) logging to the securityd
+  subsystem within one minute. It joins an Endpoint Security exec event with a Unified Log line. The
+  securityd line seen in testing is "Enabling System Keychain Always due to platform" (category keychain),
+  which Security.framework logs when the process first uses it. In testing every osascript run logged it,
+  even `osascript -e 'return 1'`, so the selectivity comes from the hidden-answer exec; the Unified Log leg
+  shows a cross-source join on host, pid and executable working, not that a keychain item was read.
+references:
+  - https://attack.mitre.org/techniques/T1056/002/
+  - https://unit42.paloaltonetworks.com/atomic-macos-amos-stealer-activity
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+modified: 2026-11-12  # base rule now also matches JXA's hiddenAnswer
+tags:
+  - attack.credential-access
+  - attack.t1056.002
+  - attack.execution
+  - attack.t1059.002
+correlation:
+  type: temporal
+  rules:
+    - osascript_hidden_answer_dialog
+    - osascript_securityd_log
+  group-by:
+    - host.name
+    - process.pid
+    - process.executable
+  timespan: 1m
+  generate: false
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fails
+      elastic-esql: fires
+      opensearch: fails
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified
+    logscale: unsupported  # pysigma-backend-crowdstrike 3.0.0 has no correlation support
+falsepositives:
+  - Admin or MDM AppleScript that prompts for the user's password (to enable FileVault or grant a secure token); its osascript loads Security.framework the same way
+level: medium

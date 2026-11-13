@@ -1,0 +1,49 @@
+title: Package Manager Payload to Persistence
+id: 46423852-c12c-4e9a-bb3e-0b4ad213b684
+status: experimental
+description: |
+  Detects an npm install-time payload taking hold for one host and user within 30 minutes, in any
+  order: node, bun or deno starting osascript, curl or a fetching shell, and the creation of a
+  LaunchAgent, a com.apple.*-named file in /Library/Caches written by a downloader or JavaScript
+  runtime, or a Claude Code settings or VS Code tasks file. Covers the Axios compromise, MiniRAT,
+  GhostClaw and Mini Shai-Hulud.
+references:
+  - https://www.huntress.com/blog/supply-chain-compromise-axios-npm-package
+  - https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+tags:
+  - attack.initial-access
+  - attack.t1195.002
+  - attack.execution
+  - attack.t1059.004
+  - attack.persistence
+  - attack.t1543.001
+  - attack.t1546
+correlation:
+  type: temporal
+  rules:
+    - node_npm_spawns_shell
+    - launchagent_or_apple_binary_or_agent_config_write
+  group-by:
+    - host.name
+    - user.name
+  timespan: 30m
+  generate: false
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fails
+      elastic-esql: fires
+      opensearch: fails
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified
+    logscale: unsupported  # pysigma-backend-crowdstrike 3.0.0 has no correlation support
+falsepositives:
+  - An npm package that downloads a binary with curl during install while an editor or Claude Code creates its settings file
+level: high

@@ -1,0 +1,30 @@
+attack_technique: T1486
+display_name: "Data Encrypted for Impact"
+atomic_tests:
+  - name: Encrypt a Dummy File with openssl enc (2026 macOS)
+    description: |
+      Simulates file encryption with a stock tool: openssl enc -aes-256-cbc on one dummy text file.
+
+      Fidelity limits:
+      - One generated dummy file, encrypted with a fixed dummy passphrase; nothing else is touched
+
+      Expected telemetry: /usr/bin/openssl exec with `enc -aes-256-cbc` in its command line.
+
+      Falcon block status: not blocked (2026-11-12 21:27Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_encrypt
+        rm -rf "$D" && mkdir -p "$D"
+        printf 'coresigma simulation dummy plaintext\n' > "$D/plain.txt"
+        /usr/bin/openssl enc -aes-256-cbc -salt -md sha256 -pass pass:coresigma-sim-dummy -in "$D/plain.txt" -out "$D/plain.txt.enc"
+        test -s "$D/plain.txt.enc"
+        echo "Encryption step complete"
+      cleanup_command: |
+        set -e
+        rm -rf /tmp/cs_sim_encrypt
+        echo "Cleanup complete"

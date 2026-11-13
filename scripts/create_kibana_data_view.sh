@@ -4,9 +4,24 @@
 set -euo pipefail
 
 KIBANA_URL="${KIBANA_URL:-http://localhost:5601}"
-ES_USER="${ES_USER:-elastic}"
-ES_PASSWORD="${ES_PASSWORD:-changeme}"
-AUTH_HEADER="Authorization: Basic $(echo -n ${ES_USER}:${ES_PASSWORD} | base64)"
+# Credentials (as scripts/setup_elasticsearch_templates.sh): $ES_API_KEY, else $ES_USER and $ES_PASSWORD, else the
+# macOS Keychain entry scripts/setup_credentials.sh stores (service coreSigma-Elasticsearch).
+KEYCHAIN_SERVICE="coreSigma-Elasticsearch"
+basic_auth() { printf 'Authorization: Basic %s' "$(printf '%s:%s' "$1" "$2" | base64 | tr -d '\n')"; }
+if [ -n "${ES_API_KEY:-}" ]; then
+    AUTH_HEADER="Authorization: ApiKey $ES_API_KEY"
+elif [ -n "${ES_USER:-}" ] && [ -n "${ES_PASSWORD:-}" ]; then
+    AUTH_HEADER=$(basic_auth "$ES_USER" "$ES_PASSWORD")
+elif KEYCHAIN_PASSWORD=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -a "${ES_USER:-elastic}" -w 2>/dev/null); then
+    AUTH_HEADER=$(basic_auth "${ES_USER:-elastic}" "$KEYCHAIN_PASSWORD")
+else
+    echo "❌ No Elasticsearch credentials: set ES_API_KEY, or ES_USER and ES_PASSWORD, or store them in the Keychain" \
+         "with ./scripts/setup_credentials.sh" >&2
+    exit 1
+fi
+# curl with the Authorization header on stdin (-H @-), as setup_credentials.sh does: on curl's command line, -u or -H
+# would show the secret to other users in `ps`. (No call here sends a body on stdin.)
+es_curl() { printf '%s\n' "$AUTH_HEADER" | curl -H @- "$@"; }
 
 echo "========================================="
 echo "Creating Kibana Data Views"
@@ -21,15 +36,12 @@ create_data_view() {
     
     echo "Creating data view: $title"
     
-    # Check if already exists
-    EXISTING=$(curl -s -X GET "$KIBANA_URL/api/data_views/data_view" \
-        -H "$AUTH_HEADER" \
-        -H 'kbn-xsrf: true' \
-        -H 'Content-Type: application/json' 2>/dev/null | \
-        python3 -c "import sys, json; 
-        data = json.load(sys.stdin) if sys.stdin.read() else {'dataViews': []};
-        matches = [dv for dv in data.get('dataViews', []) if dv.get('title') == '$pattern'];
-        print('exists' if matches else 'new')" 2>/dev/null || echo "new")
+    # Check if already exists: GET /api/data_views lists them under "data_view"
+    EXISTING=$(es_curl -s "$KIBANA_URL/api/data_views" \
+        -H 'kbn-xsrf: true' 2>/dev/null | \
+        python3 -c 'import json, sys
+views = json.load(sys.stdin).get("data_view", [])
+print("exists" if any(v.get("title") == sys.argv[1] for v in views) else "new")' "$pattern" 2>/dev/null || echo "new")
     
     if [ "$EXISTING" = "exists" ]; then
         echo "  ⚠️  Data view already exists"
@@ -37,8 +49,7 @@ create_data_view() {
     fi
     
     # Create data view
-    RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/data_views/data_view" \
-        -H "$AUTH_HEADER" \
+    RESPONSE=$(es_curl -s -X POST "$KIBANA_URL/api/data_views/data_view" \
         -H 'kbn-xsrf: true' \
         -H 'Content-Type: application/json' \
         -d "{
@@ -54,8 +65,7 @@ create_data_view() {
         echo "  ✓ Created: $title (ID: $DATA_VIEW_ID)"
         
         # Set as default if first one
-        curl -s -X POST "$KIBANA_URL/api/kibana/settings" \
-            -H "$AUTH_HEADER" \
+        es_curl -s -X POST "$KIBANA_URL/api/kibana/settings" \
             -H 'kbn-xsrf: true' \
             -H 'Content-Type: application/json' \
             -d "{\"changes\": {\"defaultIndex\": \"$DATA_VIEW_ID\"}}" > /dev/null 2>&1 || true
@@ -68,13 +78,13 @@ create_data_view() {
     fi
 }
 
-# Create UL data view
-create_data_view "macOS Unified Logging" "macos-telemetry-ul-*" "@timestamp"
-UL_SUCCESS=$?
+# Create UL data view (|| keeps set -e from ending the script before the ESF view and the summary)
+UL_SUCCESS=0
+create_data_view "macOS Unified Logging" "macos-telemetry-ul-*" "@timestamp" || UL_SUCCESS=1
 
 # Create ESF data view
-create_data_view "macOS ESF Events" "macos-telemetry-esf-*" "@timestamp"
-ESF_SUCCESS=$?
+ESF_SUCCESS=0
+create_data_view "macOS ESF Events" "macos-telemetry-esf-*" "@timestamp" || ESF_SUCCESS=1
 
 echo ""
 echo "========================================="

@@ -1,176 +1,88 @@
-# Sigma/PySigma Tools Usage in This Codebase
+# Converting coreSigma Rules with sigma-cli and pySigma
 
-## Overview
+coreSigma rules are plain Sigma. The `pysigma-pipeline-macos` plugin maps them onto each backend: it scopes each rule by its `logsource` and maps Sigma field names to the field names of the target's data.
 
-This codebase **actively uses** official Sigma and pySigma tools wherever possible. This document confirms our usage and identifies any areas where we could leverage more official tools.
+## Install
 
----
+`setup.sh` installs everything in `requirements.txt` (Python 3.10 to 3.14): pySigma 1.5.1, sigma-cli 3.1.0, the pinned backends and the plugin from `pipelines/pysigma-pipeline-macos`. The ClickHouse backend needs Python 3.13+ and is separate: `pip install -r requirements-clickhouse.txt`. To add the plugin to another environment:
 
-## ✅ Currently Using Official Tools
-
-### 1. **Sigma CLI (`sigma` command)** ✅
-
-**Installation:**
 ```bash
-pip install sigma-cli pysigma-backend-elasticsearch
-# Note: Do NOT install sigmatools - it conflicts with sigma-cli
+pip install pySigma-pipeline-macos              # from PyPI, released after coreSigma 2.0
+pip install -e pipelines/pysigma-pipeline-macos # or this repository's copy
 ```
 
-**Example usage:**
+> Don't install `sigmatools`; it conflicts with `sigma-cli`.
+
+## Pipelines
+
+| Pipeline | For | Notes |
+|---|---|---|
+| `macos_esf_ecs` | ESF rules, on the ECS documents the coreSigma ESF collector writes (Elastic Defend's field names) | A rule needs a `category`; `service: endpointsecurity` is optional. Fields outside the taxonomy fail conversion. |
+| `macos_ul_ecs` | Unified Log rules (`service: unifiedlog`), on the coreSigma UL collector's documents | Adds the category's subsystem or process predicate. |
+| `macos_ul_raw` | Unified Log rules, on native `log --style ndjson` keys (`subsystem`, `eventMessage`, ...) | Same categories as `macos_ul_ecs`. |
+| `macos_falcon` | CrowdStrike Falcon (LogScale) | `process_creation` only, with the fields Falcon's macOS process telemetry fills (`Image`, `CommandLine`, `ParentImage` by basename). A directory in a `ParentImage` value is dropped, so a positive selection matches that file name anywhere; under `not`, where that would widen an exclusion, only `ParentImage\|endswith` with the file name alone (`name`, `/name` or `*/name`) converts. LogScale only: FDR data outside LogScale names the field `event_simpleName` without the `#`, so the queries don't match there. |
+
+Each pipeline scopes only its own family and passes the other's rules through unmapped, so stack `macos_esf_ecs` and `macos_ul_ecs` when converting ESF and UL rules together. [FIELD_NAME_ORIGINS.md](FIELD_NAME_ORIGINS.md) lists the field mappings; `pipelines/pysigma-pipeline-macos/sigma/pipelines/macos/taxonomy.py` is their source.
+
+## Converting
+
 ```bash
-# Convert ESF rule to Lucene query
-sigma convert -t lucene -p ecs_macos_esf rules/esf/process_execution_suspicious.yml
+# One ESF rule to EQL
+sigma convert -t eql -p macos_esf_ecs rules/esf/macos_dscl_authonly_password_check.yml
 
-# Convert ESF rule to EQL
-sigma convert -t eql -p ecs_macos_esf rules/esf/process_execution_suspicious.yml
+# A directory of UL rules to Splunk SPL
+sigma convert -t splunk -p macos_esf_ecs -p macos_ul_ecs rules/ul/
 
-# Convert UL rule to Lucene
-sigma convert -t lucene -p ecs_macos_ul rules/ul/tcc_bypass_attempt.yml
+# ES|QL, OpenSearch Lucene, ClickHouse
+sigma convert -t esql -p macos_esf_ecs -p macos_ul_ecs rules/esf/
+sigma convert -t opensearch_lucene -p macos_esf_ecs -p macos_ul_ecs rules/ul/firewall_disabled.yml
+sigma convert -t clickhouse -p macos_esf_ecs -p macos_ul_ecs rules/ul/   # needs requirements-clickhouse.txt
+
+# Falcon LogScale: process_creation rules only
+sigma convert -t log_scale -p macos_falcon rules/esf/process_execution_suspicious.yml
 ```
 
-**Status:** ✅ **Properly used**
+What the scripts add on top of plain conversion:
 
----
+- `scripts/deploy_sigma_rules.py` post-processes EQL for Elasticsearch: numeric fields (`signal.number`, `memory.protection`, `btm.item.type`) compare with `==` and `in` instead of `:` and `like~`, and backslashes that don't start an EQL escape are doubled. `sigma convert -t eql` output doesn't have these fixes.
+- Both `deploy_sigma_rules.py` and `scripts/rule_matrix.py` apply a correlation's declared fallback (below), and convert a `temporal_ordered` correlation to an EQL sequence (`EqlSequenceBackend` in `deploy_sigma_rules.py`). `rule_matrix.py` also orders ClickHouse's `temporal_ordered` query with `windowFunnel` (`clickhouse_ordered`).
 
-### 2. **pySigma Library** ✅
+## Correlations
 
-**Imports used:**
-```python
-from sigma.collection import SigmaCollection
-from sigma.backends.elasticsearch import LuceneBackend, EqlBackend
-from sigma.pipelines.elasticsearch import ecs_macos_esf, ecs_macos_ul
+Convert a correlation together with its base rules, as the deploy and matrix scripts do, and convert one correlation (with its base rules) per `sigma convert` run on the pinned sigma-cli. sigma-cli resolves a correlation's `rules:` only within one input path: give it a directory that holds the correlation and the base rules it names. Passing the files as separate arguments fails with `Rule '...' not found in rule collection`.
+
+```bash
+mkdir /tmp/pkg && cp rules/correlation/package_manager_persistence.yml \
+  rules/esf/macos_node_spawns_shell_or_downloader.yml \
+  rules/esf/macos_launchagent_apple_cache_or_agent_config_create.yml /tmp/pkg/
+sigma convert -t splunk -p macos_esf_ecs -p macos_ul_ecs /tmp/pkg
 ```
 
-**Files using pySigma:**
-- `scripts/deploy_sigma_rules.py` - Converts and deploys rules to Kibana Detection Engine
+Each base rule's `custom.coresigma.base_of` names the correlations that use it, and a correlation's `rules:` lists the base rules' `name:` values. A base rule converted on its own still produces a query, but it is meant to run inside its correlation (a correlation's base rules have `generate: false` by default, so they produce no output of their own next to it).
 
-**Example:**
+Backends differ:
+
+- pysigma-backend-elasticsearch's EQL backend and OpenSearch Lucene have no correlations. coreSigma's `EqlSequenceBackend` (`scripts/deploy_sigma_rules.py`) adds `temporal_ordered` to EQL as `sequence by <group-by> with maxspan=<timespan>` with one step per base rule; `sigma convert -t eql` doesn't have it.
+- ES|QL has no `temporal_ordered`.
+- pysigma-backend-splunk 2.1.0 has no `temporal_ordered` either. The two ordered rules declare `custom.coresigma.splunk: temporal`, an unordered fallback that the deploy and matrix scripts apply; sigma-cli doesn't, so for Splunk change `type: temporal_ordered` to `temporal` in your copy. Splunk counts in fixed `bin` windows of the timespan: a chain that crosses a window boundary is missed.
+- ClickHouse groups a correlation over the whole search range, not per timespan, and doesn't check order (`scripts/rule_matrix.py` rewrites a `temporal_ordered` query to use `windowFunnel`).
+- A correlation with `custom.coresigma.logscale: unsupported` isn't converted for Falcon: pysigma-backend-crowdstrike 3.0.0 has no correlation support.
+
+## Python
+
 ```python
+from pathlib import Path
 from sigma.collection import SigmaCollection
-from sigma.backends.elasticsearch import EqlBackend
-from sigma.pipelines.elasticsearch import ecs_macos_esf
+from sigma.backends.splunk import SplunkBackend
+from sigma.pipelines.macos import macos_esf_ecs, macos_ul_ecs
 
-# Load Sigma rules
-rules = SigmaCollection.from_yaml(rule_file)
-
-# Get pipeline
-pipeline = ecs_macos_esf()
-
-# Convert using backend
-backend = EqlBackend(pipeline)
+rules = SigmaCollection.load_ruleset([Path("rules/esf")])  # directories are searched recursively
+backend = SplunkBackend(macos_esf_ecs() + macos_ul_ecs())
 queries = backend.convert(rules)
 ```
 
-**Status:** ✅ **Properly used**
+`scripts/deploy_sigma_rules.py` converts each rule with `convert_rule` (base rules before their correlations) and `convert_correlation_rule`, rather than converting the whole collection at once.
 
----
+## Pinned versions
 
-### 3. **Official Backends** ✅
-
-**Using:**
-- `pysigma-backend-elasticsearch>=1.0.0` - Official Elasticsearch backend
-
-**Backends leveraged:**
-- `ElasticsearchLuceneBackend` - For Lucene queries
-- `ElasticsearchEQLBackend` - For EQL queries (via CLI)
-
-**Status:** ✅ **Using official backends**
-
----
-
-### 4. **Built-in Pipelines** ✅
-
-**Using:**
-- `ecs_macos_esf()` - Built into pySigma-backend-elasticsearch for ESF events
-- `ecs_macos_ul()` - Built into pySigma-backend-elasticsearch for UL events
-
-**Status:** ✅ **Using official pipelines from pySigma-backend-elasticsearch**
-
-**Note:** Local YAML pipelines in `pipelines/` are for reference only. Production use relies on the built-in pipelines.
-
----
-
-## 📋 Dependencies (requirements.txt)
-
-**Official Sigma packages:**
-```txt
-pysigma>=0.9.0             # Python library
-pysigma-backend-elasticsearch>=1.0.0  # Official ES backend
-sigma-cli>=1.0.0           # CLI tools (sigma command)
-# Note: Do NOT use sigmatools - it conflicts with sigma-cli
-```
-
-**Status:** ✅ **All official Sigma packages**
-
----
-
-## 🔍 Implementation Notes
-
-### Rule Deployment
-
-**Script:** `scripts/deploy_sigma_rules.py`
-
-This script:
-1. Loads Sigma rules from `rules/esf/` and `rules/ul/`
-2. Converts using pySigma with appropriate backend:
-   - ESF rules → EQL backend with `ecs_macos_esf()` pipeline
-   - UL rules → Lucene backend with `ecs_macos_ul()` pipeline
-3. Deploys as Kibana Detection Rules via API
-
-### Pipeline Strategy
-
-| Rule Type | Backend | Pipeline | Query Language |
-|-----------|---------|----------|----------------|
-| ESF | `EqlBackend` | `ecs_macos_esf()` | EQL |
-| UL | `LuceneBackend` | `ecs_macos_ul()` | Lucene |
-
-**Why different backends?**
-- EQL is better for structured field queries (ESF events)
-- Lucene handles text field searches better (UL `message` field)
-
----
-
-## ✅ Confirmation Checklist
-
-- [x] **Sigma CLI (`sigma convert`)** - Available for manual conversion
-- [x] **pySigma Library** - Used for programmatic rule deployment
-- [x] **Official Backends** - Using `pysigma-backend-elasticsearch`
-- [x] **Built-in Pipelines** - Using `ecs_macos_esf()` and `ecs_macos_ul()`
-- [x] **Sigma Collection** - Using `SigmaCollection.from_yaml()`
-- [x] **Backend Conversion** - Using official `backend.convert()`
-- [x] **Dependencies** - All official packages in requirements.txt
-
----
-
-## 📊 Usage Statistics
-
-**Official Tools Used:**
-- ✅ Sigma CLI (`sigma convert`) - Available for manual testing
-- ✅ pySigma Library - `deploy_sigma_rules.py`
-- ✅ Official Backends - `LuceneBackend`, `EqlBackend`
-- ✅ Built-in Pipelines - `ecs_macos_esf()`, `ecs_macos_ul()`
-
-**Custom Code (necessary):**
-- ✅ Data collectors (`esf_collector.py`, `ul_collector.py`) - macOS-specific
-- ✅ Event normalization - ESF/UL to ECS mapping
-- ✅ Rule deployment script - Kibana API integration
-
----
-
-## ✅ Conclusion
-
-**This codebase uses official Sigma/pySigma tools extensively:**
-
-1. ✅ **CLI tools** - `sigma convert` is the primary conversion method
-2. ✅ **Python library** - pySigma used for programmatic rule handling
-3. ✅ **Official backends** - Using `pysigma-backend-elasticsearch`
-4. ✅ **Official formats** - YAML pipelines, standard rule format
-5. ✅ **Official APIs** - `ProcessingPipeline.from_yaml()`, `SigmaCollection.from_directory()`
-
-**Custom code is minimal and necessary:**
-- Data collectors (ESF/UL specific - not part of Sigma)
-- Event normalization (macOS-specific field mapping)
-- Integration scripts (ES/Kibana integration - outside Sigma scope)
-
-**The codebase properly leverages Sigma ecosystem tools!** ✅
-
+`requirements.txt` pins `pysigma==1.5.1`, `sigma-cli==3.1.0`, `pysigma-backend-elasticsearch==2.1.0`, `pysigma-backend-splunk==2.1.0`, `pysigma-backend-crowdstrike==3.0.0`, `pysigma-backend-kusto==1.0.1` and `pysigma-backend-opensearch==2.0.3`, and `requirements-clickhouse.txt` pins `pysigma-backend-clickhouse==1.1.1`: the set the support matrix was measured with. On pysigma-backend-elasticsearch 2.1.0, a `|re` that matches a backslash (`\\`) converts wrong (no shipped rule has one; an escape such as `\.` is fine).

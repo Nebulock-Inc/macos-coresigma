@@ -1,0 +1,40 @@
+title: DNS Resolution Failure Spike
+id: 9c0d5fc2-6cf8-4868-bcd6-fade4f78fc9e
+status: experimental
+description: Detects more than 50 DNS resolution failures on one host within one minute, which may
+  indicate C2 infrastructure takedown or DGA activity.
+references:
+- https://attack.mitre.org/techniques/T1568/002/
+author: Eric Brown - Nebulock, Inc.
+date: 2025-10-29
+modified: 2026-11-11
+tags:
+- attack.command-and-control
+- attack.t1568.002
+correlation:
+  type: event_count
+  rules:
+  - macos_dns_resolution_failure
+  group-by:
+  - host.name
+  timespan: 1m
+  condition:
+    gt: 50
+  generate: false
+falsepositives:
+- Network connectivity issues
+- DNS server problems
+level: medium
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: fails
+      elastic-esql: silent
+      opensearch: fails
+      splunk: silent
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

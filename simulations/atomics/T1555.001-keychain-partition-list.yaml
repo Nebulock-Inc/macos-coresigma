@@ -1,0 +1,37 @@
+attack_technique: T1555.001
+display_name: "Credentials from Password Stores: Keychain"
+atomic_tests:
+  - name: Set a Partition List on a Throwaway Keychain (2026 macOS)
+    description: |
+      Simulates the keychain partition-list change stealers use to read items without a prompt: creates a throwaway keychain with a dummy password and a dummy item, then sets the item's partition list.
+
+      Fidelity limits:
+      - The keychain, its password and its item are throwaway dummies under /tmp/cs_sim_kc; the login keychain is never touched
+      - The user's keychain search list is recorded first and restored by cleanup
+
+      Expected telemetry: /usr/bin/security execs: create-keychain, add-generic-password, and set-generic-password-partition-list.
+
+      Falcon block status: not blocked (2026-11-12 21:42Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        D=/tmp/cs_sim_kc; KC="$D/cs-sim.keychain-db"; PW=coresigma-sim-dummy
+        rm -rf "$D" && mkdir -p "$D"
+        /usr/bin/security list-keychains -d user > "$D/search_list.orig"
+        /usr/bin/security create-keychain -p "$PW" "$KC"
+        xargs /usr/bin/security list-keychains -d user -s < "$D/search_list.orig"
+        /usr/bin/security unlock-keychain -p "$PW" "$KC"
+        /usr/bin/security add-generic-password -a cs_sim -s cs_sim_partition_test -w coresigma-sim-dummy-item "$KC"
+        /usr/bin/security set-generic-password-partition-list -S apple-tool:,apple: -a cs_sim -s cs_sim_partition_test -k "$PW" "$KC" >/dev/null
+        echo "Partition list step complete"
+      cleanup_command: |
+        set -e
+        D=/tmp/cs_sim_kc
+        /usr/bin/security delete-keychain "$D/cs-sim.keychain-db" 2>/dev/null || true
+        if [ -s "$D/search_list.orig" ]; then xargs /usr/bin/security list-keychains -d user -s < "$D/search_list.orig"; fi
+        rm -rf "$D"
+        echo "Cleanup complete"

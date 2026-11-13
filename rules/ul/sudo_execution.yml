@@ -1,27 +1,36 @@
 title: macOS UL Sudo Command Execution
-id: d4e5f6a7-b8c9-0123-def4-456789012345
+id: 2f4dc432-e8f0-4c61-9f01-05195a9fd73a
 status: experimental
-description: Detects sudo command execution which could indicate privilege escalation or unauthorized access
+description: Detects sudo command execution which could indicate privilege escalation or unauthorized access. Hosts whose sudoers sets `Defaults !log_allowed` don't log successful commands (COMMAND=), so there it sees only denials.
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/15
-modified: 2025/01/15
+date: 2025-01-15
+modified: 2026-11-11
 logsource:
     product: macos
     service: unifiedlog
     category: sudo
 detection:
     selection:
-        subsystem: com.apple.sudo
         message|contains:
             - 'TTY='
             - 'USER='
-        CommandLine|contains:
-            - 'sudo'
     condition: selection
 falsepositives:
     - Legitimate administrative tasks
     - System maintenance operations
 level: low
 tags:
-    - attack.privilege_escalation
-
+    - attack.privilege-escalation
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

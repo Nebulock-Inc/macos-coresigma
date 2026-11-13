@@ -10,36 +10,33 @@ description: 'Detects execution of service control tools (launchctl, killall, pk
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1489/
-- https://attack.mitre.org/techniques/T1529/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: process_creation
 detection:
-  selection_event:
-    esf.event_type: 9
-    event.action: exec
   selection_launchctl:
     Image|endswith: /launchctl
     CommandLine|contains:
     - unload
+    - bootout
     - remove
     - disable
     - stop
   selection_kill:
     Image|endswith:
-    - killall
-    - pkill
+    - /killall
+    - /pkill
     CommandLine|contains:
     - '-9'
     - SIGKILL
     - -KILL
   selection_root:
     UserId: 0
-  condition: selection_event and (selection_launchctl or selection_kill) and not selection_root
+  condition: (selection_launchctl or selection_kill) and not selection_root
 falsepositives:
 - System administration and service management
 - Software updates requiring service restarts
@@ -55,5 +52,17 @@ fields:
 tags:
 - attack.impact
 - attack.t1489
-- attack.t1529
 level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

@@ -4,20 +4,17 @@ status: experimental
 description: Detects SIGKILL signals sent to security tools which may indicate defense
   evasion
 references:
-- https://attack.mitre.org/techniques/T1562/001/
+- https://attack.mitre.org/techniques/T1685/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/29
+date: 2025-10-29
 tags:
-- attack.defense_evasion
-- attack.t1562.001
+- attack.defense-impairment
+- attack.t1685
 logsource:
   product: macos
-  service: endpointsecurity
   category: process_signal
 detection:
   selection:
-    esf.event_type: 27
-    event.action: signal
     SignalNumber: 9
     TargetImage|contains:
     - LittleSnitch
@@ -35,4 +32,17 @@ falsepositives:
 - System updates
 - Legitimate process management
 level: high
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

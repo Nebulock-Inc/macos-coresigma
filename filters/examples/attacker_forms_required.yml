@@ -1,0 +1,22 @@
+title: Curl Attacker Forms Required Filter
+id: 9ca7c15c-0021-41cc-aeca-f9236abee1b7
+logsource:
+  product: macos
+  category: process_creation
+filter:
+  rules:
+    - 77d4f6aa-6313-48b5-8575-c78c9e1b184f  # macOS HTTP Tools with Protocol Indicators
+  selection_attacker_forms:
+    # The shell handles |, && and ; before exec, so they never reach curl's argv: match where the download lands.
+    # 'o /tmp/' covers curl -o and combined flags such as -fsSLo; 'O /tmp/' covers wget -O. Both cases are listed:
+    # Sigma's contains is case-insensitive, but ES|QL and plain keyword fields match case-sensitively.
+    CommandLine|contains:
+      - 'o /tmp/'
+      - 'O /tmp/'
+      - 'o /private/tmp/'
+      - 'O /private/tmp/'
+      - 'o /var/tmp/'
+      - 'O /var/tmp/'
+      - 'o /dev/shm/'
+      - 'O /dev/shm/'
+  condition: selection_attacker_forms

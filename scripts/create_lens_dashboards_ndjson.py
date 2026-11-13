@@ -34,10 +34,10 @@ def get_auth():
     except (ImportError, Exception):
         pass
     
-    # Fall back to environment variables
-    es_user = os.environ.get("ES_USER", "elastic")
-    es_password = os.environ.get("ES_PASSWORD", "changeme")
-    return (es_user, es_password)
+    # Fall back to environment variables (an API key alone isn't used for Kibana here)
+    if os.environ.get("ES_USER") and os.environ.get("ES_PASSWORD"):
+        return (os.environ["ES_USER"], os.environ["ES_PASSWORD"])
+    sys.exit("No Elasticsearch credentials: set ES_USER and ES_PASSWORD, or store them with ./scripts/setup_credentials.sh")
 
 
 def get_or_create_data_view():
@@ -68,9 +68,9 @@ def get_or_create_data_view():
     
     for dv in data_views:
         title = dv.get("title", "")
-        if "macos-telemetry" in title:
+        if title == "macos-telemetry-*":  # not the ESF-only or UL-only views create_kibana_data_view.sh makes
             print(f"  Found existing data view: {title} (id: {dv.get('id')})")
-                return dv.get("id")
+            return dv.get("id")
     
     # No existing data view found - check if indices exist first
     try:
@@ -78,7 +78,7 @@ def get_or_create_data_view():
         if es_resp.status_code == 404:
             print(f"  No macos-telemetry-* indices exist yet.")
             print(f"  Start a collector first to create indices:")
-            print(f"    sudo python3 collectors/esf_collector.py --output elasticsearch")
+            print(f"    sudo /usr/bin/python3 collectors/esf_collector.py --output elasticsearch")
             return None
     except requests.exceptions.RequestException:
         pass
@@ -107,38 +107,6 @@ def get_or_create_data_view():
     print(f"  Failed to create data view: {resp.status_code}")
     print(f"  Response: {resp.text[:500]}")
     return None
-
-
-def get_keyword_fields():
-    """Get fields that support keyword aggregations."""
-    auth = get_auth()
-    resp = requests.get(f"{ES_URL}/macos-telemetry-*/_mapping", auth=auth, timeout=10)
-    
-    if resp.status_code != 200:
-        return set()
-    
-    keyword_fields = set()
-    
-    for index_data in resp.json().values():
-        props = index_data.get("mappings", {}).get("properties", {})
-        
-        def extract_fields(properties, prefix=""):
-            for field_name, field_config in properties.items():
-                full_name = f"{prefix}{field_name}" if prefix else field_name
-                field_type = field_config.get("type")
-                
-                if field_type == "keyword":
-                    keyword_fields.add(full_name)
-                elif field_type == "text" and "keyword" in field_config.get("fields", {}):
-                    keyword_fields.add(f"{full_name}.keyword")
-                
-                if "properties" in field_config:
-                    extract_fields(field_config["properties"], f"{full_name}.")
-        
-        extract_fields(props)
-        break
-    
-    return keyword_fields
 
 
 def create_lens_saved_object(vis_id: str, title: str, vis_type: str, layer_config: dict, data_view_id: str) -> dict:
@@ -542,27 +510,9 @@ def main():
         sys.exit(1)
     print(f"  Data view ID: {data_view_id}")
     
-    # Check field mappings
-    print("\nChecking field mappings...")
-    keyword_fields = get_keyword_fields()
-    
-    # Determine parent field - prefer process.parent.name.keyword for parent→child viz
-    # This matches the "Endpoint Security" dashboard format
-    if "process.parent.name.keyword" in keyword_fields:
-        parent_field = "process.parent.name.keyword"
-    elif "process.parent.name" in keyword_fields:
-        parent_field = "process.parent.name"  # Already keyword type
-    elif "process.parent.executable.keyword" in keyword_fields:
-        parent_field = "process.parent.executable.keyword"
-    elif "process.parent.executable" in keyword_fields:
-        parent_field = "process.parent.executable"  # Already keyword type
-    else:
-        # Default fallback
-        parent_field = "process.parent.name.keyword"
-        print("  ℹ️ Parent field not yet in index (restart collector and generate events)")
-    print(f"  Parent process field: {parent_field}")
-    print(f"  Available keyword fields: {len(keyword_fields)}")
-    
+    # Field names as the collectors write them; the index templates (setup_elasticsearch_templates.sh) map each
+    # as keyword or wildcard, both aggregatable, so there are no .keyword subfields
+
     # ============================================================
     # Build all saved objects
     # ============================================================
@@ -571,10 +521,10 @@ def main():
     # --- Simple Dashboard Visualizations ---
     simple_vis = [
         ("lens-simple-total", "Total Events", "lnsMetric", create_metric_config(data_view_id)),
-        ("lens-simple-actions", "Event Actions", "lnsPie", create_pie_config("event.action.keyword", 10)),
-        ("lens-simple-users", "Users", "lnsPie", create_pie_config("process.user.name.keyword", 10)),
-        ("lens-simple-timeline", "Events Over Time", "lnsXY", create_timeline_config("event.action.keyword", 8)),
-        ("lens-simple-processes", "Top Processes", "lnsDatatable", create_table_config(["process.executable.keyword"], 15)),
+        ("lens-simple-actions", "Event Actions", "lnsPie", create_pie_config("event.action", 10)),
+        ("lens-simple-users", "Users", "lnsPie", create_pie_config("user.name", 10)),
+        ("lens-simple-timeline", "Events Over Time", "lnsXY", create_timeline_config("event.action", 8)),
+        ("lens-simple-processes", "Top Processes", "lnsDatatable", create_table_config(["process.executable"], 15)),
     ]
     
     for vis_id, title, vis_type, config in simple_vis:
@@ -592,8 +542,8 @@ def main():
     simple_vis_ids = [v[0] for v in simple_vis]
     
     simple_dashboard = create_dashboard_saved_object(
-        "macos-security-dashboard",
-        "macOS Security Dashboard",
+        "macos-security-overview-dashboard",  # not exports/'s macos-security-dashboard: importing one won't replace the other
+        "macOS Security Dashboard (generated)",
         "Overview of macOS security events",
         simple_panels,
         simple_vis_ids
@@ -601,24 +551,23 @@ def main():
     all_objects.append(simple_dashboard)
     
     # --- Comprehensive Dashboard Visualizations ---
-    # Added Event Categories (event.category.keyword) per user request
     comp_vis = [
         ("lens-comp-total", "Total Events", "lnsMetric", create_metric_config(data_view_id)),
-        ("lens-comp-categories", "Event Categories", "lnsPie", create_pie_config("event.category.keyword", 15)),  # NEW
-        ("lens-comp-actions", "Event Actions", "lnsPie", create_pie_config("event.action.keyword", 15)),
-        ("lens-comp-users", "Users", "lnsPie", create_pie_config("process.user.name.keyword", 15)),
-        ("lens-comp-groups", "Groups", "lnsPie", create_pie_config("process.group.name.keyword", 15)),
-        ("lens-comp-timeline", "Events Over Time", "lnsXY", create_timeline_config("event.action.keyword", 10)),
-        ("lens-comp-event-types", "ESF Event Types", "lnsPie", create_pie_config("esf.event_type", 20)),
-        ("lens-comp-security", "Security Events", "lnsXY", create_bar_config("event.action.keyword", 15)),
-        ("lens-comp-cmdlines", "Top Command Lines", "lnsDatatable", create_table_config(["process.command_line.keyword"], 20)),
-        ("lens-comp-executables", "Top Executables", "lnsDatatable", create_table_config(["process.executable.keyword"], 20)),
-        ("lens-comp-parent-child", "Top Parent→Child Process Names", "lnsDatatable", create_table_config([parent_field, "process.name.keyword"], 15)),
-        ("lens-comp-rare-exec", "Rare Executables", "lnsDatatable", create_table_config(["process.executable.keyword"], 30, ascending=True)),
-        ("lens-comp-rare-proc", "Rare Processes", "lnsDatatable", create_table_config(["process.name.keyword"], 30, ascending=True)),
-        ("lens-comp-rare-cmd", "Rare Commands", "lnsDatatable", create_table_config(["process.command_line.keyword"], 30, ascending=True)),
-        ("lens-comp-rare-parent", "Rare Parent→Child Process Names", "lnsDatatable", create_table_config([parent_field, "process.name.keyword"], 20, ascending=True)),
-        ("lens-comp-files", "File Operations", "lnsXY", create_bar_config("file.path.keyword", 15)),
+        ("lens-comp-categories", "Event Categories", "lnsPie", create_pie_config("event.category", 15)),
+        ("lens-comp-actions", "Event Actions", "lnsPie", create_pie_config("event.action", 15)),
+        ("lens-comp-users", "Users", "lnsPie", create_pie_config("user.name", 15)),
+        ("lens-comp-groups", "Hosts", "lnsPie", create_pie_config("host.name", 15)),
+        ("lens-comp-timeline", "Events Over Time", "lnsXY", create_timeline_config("event.action", 10)),
+        ("lens-comp-event-types", "Event Types", "lnsPie", create_pie_config("event.type", 20)),
+        ("lens-comp-security", "Security Events", "lnsXY", create_bar_config("event.action", 15)),
+        ("lens-comp-cmdlines", "Top Command Lines", "lnsDatatable", create_table_config(["process.command_line"], 20)),
+        ("lens-comp-executables", "Top Executables", "lnsDatatable", create_table_config(["process.executable"], 20)),
+        ("lens-comp-parent-child", "Top Parent→Child Executables", "lnsDatatable", create_table_config(["process.parent.executable", "process.executable"], 15)),
+        ("lens-comp-rare-exec", "Rare Executables", "lnsDatatable", create_table_config(["process.executable"], 30, ascending=True)),
+        ("lens-comp-rare-proc", "Rare Users", "lnsDatatable", create_table_config(["user.name"], 30, ascending=True)),
+        ("lens-comp-rare-cmd", "Rare Commands", "lnsDatatable", create_table_config(["process.command_line"], 30, ascending=True)),
+        ("lens-comp-rare-parent", "Rare Parent→Child Executables", "lnsDatatable", create_table_config(["process.parent.executable", "process.executable"], 20, ascending=True)),
+        ("lens-comp-files", "File Operations", "lnsXY", create_bar_config("file.path", 15)),
     ]
     
     for vis_id, title, vis_type, config in comp_vis:
@@ -627,12 +576,12 @@ def main():
     
     # Comprehensive dashboard panels - updated layout from user export (2026-01-21)
     # Row 1: Total Events (0), Event Categories (1), Event Actions (2)
-    # Row 2: ESF Event Types (6), Users (3), Groups (4)
+    # Row 2: Event Types (6), Users (3), Hosts (4)
     # Row 3: Events Over Time (5)
     # Row 4: Security Events (7)
     # Row 5: Top Command Lines (8), Top Executables (9)
     # Row 6: Parent → Child (10)
-    # Row 7: Rare Executables (11), Rare Processes (12)
+    # Row 7: Rare Executables (11), Rare Users (12)
     # Row 8: Rare Commands (13), Rare Parent→Child (14)
     # Row 9: File Operations (15)
     comp_panels = [
@@ -640,7 +589,7 @@ def main():
         {"type": "lens", "gridData": {"x": 0, "y": 0, "w": 8, "h": 14, "i": "0"}, "panelIndex": "0", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_0"},
         {"type": "lens", "gridData": {"x": 8, "y": 0, "w": 18, "h": 14, "i": "1"}, "panelIndex": "1", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_1"},
         {"type": "lens", "gridData": {"x": 26, "y": 0, "w": 22, "h": 14, "i": "2"}, "panelIndex": "2", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_2"},
-        # Row 2 - ESF Types, Users, Groups
+        # Row 2 - Event Types, Users, Hosts
         {"type": "lens", "gridData": {"x": 0, "y": 14, "w": 16, "h": 12, "i": "6"}, "panelIndex": "6", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_6"},
         {"type": "lens", "gridData": {"x": 16, "y": 14, "w": 18, "h": 12, "i": "3"}, "panelIndex": "3", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_3"},
         {"type": "lens", "gridData": {"x": 34, "y": 14, "w": 14, "h": 12, "i": "4"}, "panelIndex": "4", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_4"},
@@ -653,7 +602,7 @@ def main():
         {"type": "lens", "gridData": {"x": 24, "y": 50, "w": 24, "h": 14, "i": "9"}, "panelIndex": "9", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_9"},
         # Row 6 - Parent → Child
         {"type": "lens", "gridData": {"x": 0, "y": 64, "w": 48, "h": 14, "i": "10"}, "panelIndex": "10", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_10"},
-        # Row 7 - Rare Executables, Rare Processes
+        # Row 7 - Rare Executables, Rare Users
         {"type": "lens", "gridData": {"x": 0, "y": 78, "w": 35, "h": 14, "i": "11"}, "panelIndex": "11", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_11"},
         {"type": "lens", "gridData": {"x": 35, "y": 78, "w": 13, "h": 14, "i": "12"}, "panelIndex": "12", "embeddableConfig": {"enhancements": {}}, "panelRefName": "panel_12"},
         # Row 8 - Rare Commands, Rare Parent→Child
@@ -666,7 +615,7 @@ def main():
     
     comp_dashboard = create_dashboard_saved_object(
         "macos-endpoint-security-dashboard",
-        "macOS Endpoint Security (ESF) Telemetry Overview",
+        "macOS Endpoint Security (ESF) Telemetry Overview (generated)",  # the export has the same title
         "Comprehensive security telemetry from macOS Endpoint Security Framework using Lens visualizations",
         comp_panels,
         comp_vis_ids
@@ -683,6 +632,7 @@ def main():
     
     print(f"\nImporting {len(vis_objects)} visualizations...")
     success, message = import_ndjson(vis_objects, "visualizations")
+    failed = not success
     if success:
         print(f"  ✓ {message}")
     else:
@@ -696,10 +646,13 @@ def main():
     
     print(f"\nImporting {len(dash_objects)} dashboards...")
     success, message = import_ndjson(dash_objects, "dashboards")
+    failed = failed or not success
     if success:
         print(f"  ✓ {message}")
     else:
         print(f"  ✗ {message}")
+    if failed:
+        sys.exit("Some saved objects failed to import (see above)")
     
     print("\n" + "=" * 70)
     print("Done! Refresh Kibana to see the dashboards.")

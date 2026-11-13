@@ -1,5 +1,5 @@
 title: macOS ULS Quarantine or XProtect Detection
-id: 0a1b2c3d-4e5f-4789-abcd-ef0123456789
+id: 4d7fca29-035f-426a-b810-4346f2a30d95
 status: experimental
 description: Detect logs referencing quarantine (LSQuarantine) or XProtect malware
   detections.
@@ -8,6 +8,7 @@ date: 2025-10-29
 logsource:
   product: macos
   service: unifiedlog
+  category: xprotect
 level: high
 detection:
   selection:
@@ -18,4 +19,17 @@ detection:
   condition: selection
 falsepositives:
 - rare, but test systems may trigger intentionally
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

@@ -1,0 +1,45 @@
+title: Apple-Named LaunchAgent Created in a User Library
+id: 65d1e9f4-0a89-4d2f-81bf-e4d22a7fd5df
+status: experimental
+description: |
+  Detects creation of a com.apple.*.plist in a user's ~/Library/LaunchAgents. Apple ships its agents
+  in /System/Library/LaunchAgents, so an Apple-named agent in a user library is almost always
+  masquerading; MacSync (2026) persists with a fake Finder agent this way.
+references:
+  - https://securelist.com/macsync-new-version/121383
+  - https://attack.mitre.org/techniques/T1543/001/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-11-11
+logsource:
+  product: macos
+  category: file_event
+detection:
+  selection:
+    TargetFilename|startswith: /Users/
+    TargetFilename|contains: /Library/LaunchAgents/com.apple.
+    TargetFilename|endswith: .plist
+  filter_dotmac_cert:
+    # the one Apple-created per-user agent name (MobileMe/iCloud certificate renewal)
+    TargetFilename|contains: /Library/LaunchAgents/com.apple.CSConfigDotMacCert-
+  condition: selection and not filter_dotmac_cert
+falsepositives:
+  - Older Apple software that wrote per-user agents under the com.apple prefix
+tags:
+  - attack.persistence
+  - attack.t1543.001
+  - attack.stealth
+  - attack.t1036.005
+level: high
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

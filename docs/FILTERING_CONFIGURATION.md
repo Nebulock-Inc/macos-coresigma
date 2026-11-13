@@ -1,225 +1,88 @@
-# ESF Event Filtering Configuration
+# ESF Event Filtering
 
-## Overview
+The ESF collector subscribes eslogger to the events the taxonomy's categories use, plus `fork` and `exit`, that this macOS release's eslogger lists; it names the ones it skips at startup. Most of them are sent as they come. A few high-volume events are filtered in `ESFCollector.should_keep_event` (`collectors/esf_collector.py`). `scripts/replay_capture.py` applies the same filter, so the support matrix measured rules on what the collector keeps.
 
-The ESF collector includes intelligent filtering to reduce log volume from **~1.7M events** to approximately **~30K events** while maintaining 100% security detection capability. This represents a **98% reduction** in volume without losing security visibility.
+## What is filtered
 
-## Current Filtering Strategy
+| Event | Kept when |
+|---|---|
+| `mprotect` | The new protection is both writable and executable (W+X). |
+| `open` | The path is a security path (below). |
+| `create` | The path is a security path, starts with `/Library/Caches/com.apple.`, or contains a create-only path (below). |
+| `rename` | The source or the destination is a security path, or the destination's file name starts with `.` (hidden files). A rename whose paths can't be read is kept unless the process is `log`, `tr`, `sed`, `jq` or `wc`. |
+| `setextattr` | The attribute name contains `quarantine`, or the path is a security path. |
+| `fork` | The forking process's path contains `bash`, `sh`, `zsh`, `python`, `perl`, `ruby`, `node`, `curl`, `wget`, `nc`, `ssh`, `scp`, `sudo`, `su` or `launchd`; otherwise a random 10% of forks. |
+| everything else | Always: `exec`, `exit`, `signal`, `unlink`, `kextload`, `tcc_modify`, the `btm_*`, `od_*`, `profile_*`, `setuid`-family, `sudo`/`su`, XProtect and authentication events, and the rest. |
 
-Based on event distribution analysis:
-- **mprotect**: 1,286,463 events (65.0%) → Filtered to ~5,000 events
-- **rename**: 623,509 events (31.5%) → Filtered to ~5,000 events  
-- **fork**: 34,814 events (1.8%) → Sampled to ~3,500 events (10%)
-- **create**: 5,296 events (0.3%) → Filtered to ~500 events
-- **setextattr**: 3,796 events (0.2%) → Filtered to ~400 events
+**Security paths** (`SECURITY_PATHS`): a path is one when it contains an entry (`~` is read as `/Users`, and `*` is dropped):
 
-### Events Always Kept (100% Visibility)
+- launch items and startup: `/Library/LaunchAgents`, `/Library/LaunchDaemons`, `/System/Library/LaunchAgents`, `/System/Library/LaunchDaemons`, `/Library/StartupItems`, `/etc/periodic`
+- kernel extensions: `/Library/Extensions`, `/System/Library/Extensions`
+- system configuration: `/private/etc`, `/etc/sudoers`, `/etc/pam.d`, `/etc/ssh`, `/var/db/auth.db`, `/var/db/sudo`
+- TCC databases: `/Library/Application Support/com.apple.TCC` (system and per-user)
+- login items, managed preferences and profiles: `com.apple.loginitems.plist`, `/Library/Managed Preferences`, `/var/db/ConfigurationProfiles`
+- firewall and security preferences: `/Library/Preferences/com.apple.alf.plist`, `/Library/Preferences/com.apple.security`
+- credential files: `/.aws/`, `/.ssh/`
 
-These events are **NEVER filtered** and are essential for security detection:
+**Create-only paths** (`CREATE_PATHS`): `/Library/Application Support/`, `.app/Contents/`, `/.claude/`, `/.vscode/`. Creates there are kept for the staging, media-in-code and agent-configuration rules; opens and renames there are not.
 
-- **exec** (all process executions) - Required for all process-based Sigma rules
-- **xp_malware_detected/remediated** - Malware detection events
-- **cs_invalidated** - Code signature failures
-- **tcc_modify** - Privacy database modifications
-- **gatekeeper_user_override** - Security policy bypasses
-- **setuid/setgid** - Privilege escalation
-- **ptrace** - Process injection attempts
-- **kextload/kextunload** - Kernel extension operations
-- **authentication** - Login events
-- **mount** - Filesystem mount operations
-- **User management** events (od_create_user, etc.)
-- **Profile** management events
+## What this means for rules
 
-## Filtering Details
+- **Renames.** `file_event` rules also take the destination of a rename, but only renames the filter keeps reach the stores: renames into security paths and to hidden names. Renames into the create-only paths and into `/Library/Caches/com.apple.` are dropped, so that half of those rules' scope isn't covered by collected data. The support matrix notes it on each affected rule.
+- **Forks** are sampled, so process trees built from `fork` events have gaps. `exec` events are all kept, and each carries its parent's executable.
+- **Opens** outside the security paths are dropped, so a `file_access` rule on another path sees nothing.
 
-### mprotect Events (Event Type 20)
-
-**Filtered**: Keep only W+X (write+execute) memory mappings
-
-**Reason**: Normal memory protection changes are routine OS operations. W+X mappings are rare and indicate potential code injection or memory corruption attempts.
-
-**Security Impact**: Zero - all suspicious memory operations are captured
-
-**Volume Reduction**: ~99.6% (1.28M → ~5K)
-
-### rename Events (Event Type 21)
-
-**Filtered**: Keep only operations involving security-sensitive paths
-
-**Reason**: Most file renames are routine operations. Renames in persistence locations, security configs, or system directories are security-relevant.
-
-**Security Impact**: Zero - all security-relevant renames are captured
-
-**Volume Reduction**: ~99% (623K → ~5K)
-
-**Security Paths Monitored**:
-- `/Library/LaunchAgents`, `/Library/LaunchDaemons`
-- `/System/Library/LaunchAgents`, `/System/Library/LaunchDaemons`
-- `/Users/*/Library/LaunchAgents`
-- `/Library/StartupItems`, `/etc/periodic`
-- `/Library/Extensions`, `/System/Library/Extensions`
-- `/private/etc`, `/etc/sudoers`, `/etc/pam.d`, `/etc/ssh`
-- TCC databases
-- Login items and preferences
-- Configuration profiles
-- Security preferences
-
-### fork Events (Event Type 11)
-
-**Filtered**: Sample at 10% (random)
-
-**Reason**: Fork events are very common but still provide value for process tree reconstruction. 10% sampling maintains visibility while reducing noise.
-
-**Security Impact**: Minimal - process trees can still be reconstructed with sampled data
-
-**Volume Reduction**: 90% (35K → ~3.5K)
-
-### create Events (Event Type 13)
-
-**Filtered**: Keep only file creation in persistence/security locations
-
-**Reason**: Most file creation is routine. Creation in persistence or security-sensitive locations indicates potential malware installation.
-
-**Security Impact**: Zero - all security-relevant file creation is captured
-
-**Volume Reduction**: ~90% (5K → ~500)
-
-### setextattr Events (Event Type 32)
-
-**Filtered**: Keep only quarantine attribute operations and security path modifications
-
-**Reason**: Extended attribute changes are routine, but quarantine attribute changes are critical for malware delivery detection.
-
-**Security Impact**: Zero - all quarantine bypass attempts are captured
-
-**Volume Reduction**: ~90% (3.8K → ~400)
+The filter's volume reduction hasn't been measured on the current collector; check it on your own hosts (below).
 
 ## Configuration
 
-### Enable/Disable Filtering
+### Disable filtering
 
-**In Code** (editing `collectors/esf_collector.py`):
-```python
-class ESFCollector:
-    ENABLE_FILTERING = True  # Set to False to disable filtering
-```
-
-**Command Line**:
 ```bash
-# With filtering (default)
-python3 collectors/esf_collector.py --output elasticsearch
-
-# Without filtering (capture all events)
-python3 collectors/esf_collector.py --output elasticsearch --no-filtering
+sudo --preserve-env=ES_USER,ES_PASSWORD,ES_API_KEY python3 collectors/esf_collector.py --output elasticsearch --no-filtering
 ```
 
-### Customize Security Paths
+This keeps every subscribed event; expect far more `mprotect`, `open`, `rename`, `create` and `fork` volume.
 
-Edit the `SECURITY_PATHS` set in `collectors/esf_collector.py`:
+### Customize the paths
+
+Edit `SECURITY_PATHS` or `CREATE_PATHS` in `collectors/esf_collector.py`, then restart the collector:
 
 ```python
 SECURITY_PATHS = {
-    "/Library/LaunchAgents",
-    "/Library/LaunchDaemons",
-    # Add your custom paths here
+    "/Library/LaunchAgents", "/Library/LaunchDaemons",
+    # ...
+    "/Library/MyCompany/Agents",  # your addition
 }
 ```
 
-### Adjust Fork Sampling Rate
+### Adjust fork sampling
 
-Edit the sampling rate in `should_keep_event()`:
+The rate is the `0.1` in the `fork` branch of `should_keep_event`:
 
 ```python
-elif event_name == "fork":
-    import random
-    return random.random() < 0.1  # Change 0.1 to desired rate (0.0-1.0)
+should_keep = self._random.random() < 0.1  # change 0.1 to the rate you want (0.0-1.0)
 ```
-
-## Expected Volume Reduction
-
-| Event Type | Original Volume | After Filtering | Reduction |
-|------------|----------------|-----------------|-----------|
-| mprotect | 1,286,463 | ~5,000 | 99.6% |
-| rename | 623,509 | ~5,000 | 99.2% |
-| fork | 34,814 | ~3,500 | 90% |
-| create | 5,296 | ~500 | 90.6% |
-| setextattr | 3,796 | ~400 | 89.5% |
-| exec | 21,219 | 21,219 | 0% (kept) |
-| **Total** | **~1.7M** | **~30K** | **98.2%** |
-
-## Sigma Rules Impact Analysis
-
-All current Sigma rules remain fully functional:
-
-- **Process execution rules**: ✓ All exec events kept (100%)
-- **File creation rules**: ✓ Security-relevant creates kept
-- **Persistence rules**: ✓ All persistence paths monitored
-- **Privilege escalation rules**: ✓ All setuid/setgid kept
-- **Malware detection rules**: ✓ All malware events kept
-- **Code injection rules**: ✓ All ptrace and suspicious mprotect kept
-
-**No rule breakage**: Filtering only removes noise, not security-relevant events.
 
 ## Verification
 
-To verify filtering is working:
+Count documents per event:
 
 ```bash
-# Check event distribution
-curl -u elastic:changeme "http://localhost:9200/macos-telemetry-esf-*/_search?size=0" \
+curl -s -u "elastic:$ES_PASSWORD" "http://localhost:9200/macos-telemetry-esf-*/_search?size=0" \
   -H 'Content-Type: application/json' \
-  -d '{"aggs":{"event_types":{"terms":{"field":"event.action.keyword","size":20}}}}'
-
-# Should see:
-# - mprotect: ~5K (not 1.28M)
-# - rename: ~5K (not 623K)
-# - fork: ~3.5K (not 35K)
+  -d '{"aggs":{"events":{"terms":{"field":"event.action","size":60}}}}'
 ```
 
-## Disabling Filtering
-
-If you need to capture all events (for compliance, forensics, etc.):
-
-### Method 1: Command Line Flag
-```bash
-python3 collectors/esf_collector.py --output elasticsearch --no-filtering
-```
-
-### Method 2: Edit Source Code
-In `collectors/esf_collector.py`, line ~40:
-```python
-ENABLE_FILTERING = False  # Change to False
-```
-
-### Method 3: Environment Variable (future enhancement)
-```bash
-export ESF_NO_FILTERING=1
-python3 collectors/esf_collector.py --output elasticsearch
-```
-
-## Recommendations
-
-**For Production Environments:**
-- ✅ **Keep filtering enabled** - Reduces storage costs by 98% without losing security visibility
-- ✅ **Monitor filtered event counts** - Ensure filtering logic is working as expected
-- ✅ **Periodically review** - Adjust security paths if new persistence techniques emerge
-
-**For Compliance/Forensics:**
-- ⚠️ **Disable filtering** - Use `--no-filtering` flag if full audit trail required
-- ⚠️ **Plan for storage** - Expect ~1.7M events/day (adjust retention accordingly)
+Compare a run with `--no-filtering` (or `--output file` on both) to see what the filter removes on your hosts.
 
 ## Troubleshooting
 
-**Issue**: Too many events still being captured
-- Verify filtering is enabled: Check logs for "Intelligent filtering ENABLED"
-- Check event distribution: Should see filtered counts, not raw counts
+**Missing events in detections**
+- Check the table above: is the event filtered, and is its path a security path?
+- Add the path to `SECURITY_PATHS` (or `CREATE_PATHS` for creates only)
+- Run with `--no-filtering` for a while to confirm the event arrives at all
 
-**Issue**: Missing events in detections
-- Check if event type is in `ALWAYS_KEEP_EVENT_TYPES`
-- Verify security paths include the location in question
-- Consider temporarily disabling filtering to verify
-
-**Issue**: Need to capture specific path
-- Add path to `SECURITY_PATHS` set in collector code
-- Restart collector to apply changes
-
+**An event never arrives, filtered or not**
+- The ESF collector subscribes only to the events in the taxonomy (and `fork`, `exit`) that this macOS release's eslogger lists; see [FIELD_NAME_ORIGINS.md](FIELD_NAME_ORIGINS.md)
+- The `Skipping N events ...` line at startup names the taxonomy events your release doesn't have (`eslogger --list-events` shows what it does)

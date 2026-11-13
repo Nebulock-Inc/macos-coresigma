@@ -7,28 +7,37 @@ references:
 - https://attack.mitre.org/techniques/T1068/
 - https://wojciechregula.blog/post/learn-xpc-exploitation-part-2-say-no-to-the-dump/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/29
+date: 2025-10-29
 tags:
-- attack.privilege_escalation
+- attack.privilege-escalation
 - attack.t1068
 logsource:
   product: macos
-  service: endpointsecurity
   category: xpc_connection
 detection:
-  selection_event:
-    esf.event_type: 65
-    event.action: xpc_connect
-  selection_user:
-    UserId: 501-65535
   selection_service:
     XpcServiceName|contains:
     - com.apple.xpc.privileged
     - com.apple.security
     - com.apple.admin
-  condition: selection_event and selection_user and selection_service
+  filter_root:
+    UserId: 0
+  condition: selection_service and not filter_root
 falsepositives:
 - System utilities
 - Administrative tools
 level: medium
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

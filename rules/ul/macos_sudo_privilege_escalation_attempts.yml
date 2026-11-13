@@ -1,33 +1,27 @@
 title: macOS Sudo Privilege Escalation Attempts
 id: 8f79e9a5-56d3-451d-9c2a-81d8cbe7be61
 status: experimental
-description: 'Detects sudo command execution and privilege escalation attempts from
-  the
-
-  com.apple.sudo subsystem. Monitors for both successful and failed sudo attempts
-
-  which may indicate privilege escalation activities or credential abuse.
-
-  '
+description: Detects sudo command execution and privilege escalation attempts logged by
+  /usr/bin/sudo. Monitors for both successful and failed sudo attempts which may indicate
+  privilege escalation activities or credential abuse. Hosts whose sudoers sets `Defaults !log_allowed` don't log successful commands (COMMAND=), so there it sees only denials.
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1548/003/
 - https://attack.mitre.org/techniques/T1078/
 logsource:
   product: macos
   service: unifiedlog
+  category: sudo
 detection:
-  selection_subsystem:
-    subsystem: com.apple.sudo
   selection_keywords:
     message|contains:
     - COMMAND
     - authentication
     - sudo
     - root
-  condition: selection_subsystem and selection_keywords
+  condition: selection_keywords
 falsepositives:
 - Legitimate administrative tasks
 - System maintenance operations
@@ -36,11 +30,24 @@ falsepositives:
 fields:
 - subsystem
 - category
-- process
+- processImagePath
 - message
-- level
+- messageType
 tags:
-- attack.privilege_escalation
+- attack.privilege-escalation
 - attack.t1548.003
 - attack.t1078
 level: medium
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

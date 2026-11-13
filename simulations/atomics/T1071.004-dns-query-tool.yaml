@@ -1,0 +1,24 @@
+attack_technique: T1071.004
+display_name: "Application Layer Protocol: DNS"
+atomic_tests:
+  - name: DNS Lookup with dig (2026 macOS)
+    description: |
+      Simulates a DNS lookup made with a command-line DNS tool, as DNS tunnelling and C2 tooling do.
+
+      Fidelity limits:
+      - One ordinary lookup of a public name the test host's DNS firewall allows; no tunnelling or encoded data
+
+      Expected telemetry: /usr/bin/dig exec.
+
+      Falcon block status: not blocked (2026-11-12 21:30Z run; macOS 26.7, Falcon 8.10)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        /usr/bin/dig +short +time=3 +tries=1 artifacts.elastic.co || true
+        echo "DNS lookup complete"
+      cleanup_command: |
+        echo "Cleanup complete (nothing to remove)"

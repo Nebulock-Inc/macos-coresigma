@@ -1,0 +1,59 @@
+attack_technique: T1021.004
+display_name: "Remote Services: SSH"
+atomic_tests:
+  - name: SSH Key Login to Localhost (2026 macOS)
+    description: |
+      Simulates an SSH session with a planted key: generates a throwaway ed25519 key,
+      authorizes it for the current user, and logs in to localhost with it to run one
+      command, so the ssh client and the server's sshd-session both start.
+
+      Fidelity limits:
+      - The connection stays on the host (localhost), not another machine
+      - Needs Remote Login on and passwordless sudo: on the EC2 Mac test host ~/.ssh is
+        root-owned 0700, so it is handed to the user for the login; its owner and mode, and
+        any authorized_keys file, are recorded first and put back by cleanup, which also removes
+        the ~/.ssh/agent socket directory the login creates
+
+      Expected telemetry: ssh-keygen exec, ssh exec (client, `<user>@localhost`), sshd-session
+      execs for the login, and the remote command's exec under it.
+
+      Falcon block status: not blocked (2026-11-12 15:05Z run; macOS 26.7, Falcon 8.10)
+
+      Prerequisite: Remote Login (sshd) on, passwordless sudo for the user.
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        sudo -n true 2>/dev/null || { echo "prereq missing: passwordless sudo"; exit 1; }
+        D=/tmp/cs_ssh; S="$HOME/.ssh"; AK="$HOME/.ssh/authorized_keys"
+        rm -rf "$D" && mkdir -p "$D"
+        ssh-keygen -q -t ed25519 -N '' -C cs_sim_ssh_test -f "$D/id"
+        # Record ~/.ssh and authorized_keys as they are, before touching either; cleanup restores from these records.
+        if sudo -n test -d "$S"; then stat -f '%Su:%Sg %Lp' "$S" > "$D/ssh_dir"; else echo absent > "$D/ssh_dir"; sudo -n mkdir -m 700 "$S"; fi
+        if sudo -n test -e "$AK"; then sudo -n cp -p "$AK" "$D/authorized_keys.orig"; echo existed > "$D/ak"; else echo absent > "$D/ak"; fi
+        # The login creates ~/.ssh/agent (agent sockets) if it isn't there.
+        if sudo -n test -e "$S/agent"; then echo existed > "$D/agent"; else echo absent > "$D/agent"; fi
+        # sshd reads the key as the user, so the user must be able to enter ~/.ssh.
+        sudo -n chown "$(id -un)" "$S"
+        sudo -n sh -c "cat '$D/id.pub' >> '$AK' && chown $(id -un) '$AK' && chmod 600 '$AK'"
+        ssh -i "$D/id" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o LogLevel=ERROR "$(id -un)@localhost" 'id -un'
+        echo "SSH localhost login complete"
+      cleanup_command: |
+        set -e
+        D=/tmp/cs_ssh; S="$HOME/.ssh"; AK="$HOME/.ssh/authorized_keys"
+        case "$(cat "$D/ak" 2>/dev/null)" in
+          existed) sudo -n cp -p "$D/authorized_keys.orig" "$AK" ;;
+          absent) sudo -n rm -f "$AK" ;;
+        esac
+        if [ "$(cat "$D/agent" 2>/dev/null)" = absent ]; then sudo -n rm -rf "$S/agent"; fi
+        OWN=$(cat "$D/ssh_dir" 2>/dev/null || true)
+        case "$OWN" in
+          "") ;;
+          absent) sudo -n rmdir "$S" 2>/dev/null || true ;;
+          *) sudo -n chown "${OWN% *}" "$S"; sudo -n chmod "${OWN#* }" "$S" ;;
+        esac
+        rm -rf "$D"
+        echo "Cleanup complete"

@@ -1,0 +1,94 @@
+title: Executable File Staged in Application Support Frameworks Directory
+id: b52351c4-a7c3-4d26-89e6-0e58ce67b490
+status: experimental
+description: |
+  Detects file creation in a Frameworks/, bin/ or lib/ directory directly under an
+  Application Support vendor directory (~/Library/Application Support/<vendor>/Frameworks/,
+  /Library/Application Support/<vendor>/bin/ and so on) where the creating process is not an
+  Apple installer, MDM agent or known application vendor (matched by signing ID or team ID,
+  never by path). Legitimate macOS applications install their bundled frameworks at initial
+  installation time via the macOS Installer service, drag-to-Applications, or MDM-managed
+  deployment. Runtime extraction of files into Application Support framework directories is
+  characteristic of tools that stage exploitation payloads, device unlock binaries, or jailbreak
+  components separately from their main application bundle. This behavioral pattern is
+  tool-agnostic and targets the staging technique rather than specific file names or applications.
+  Only file creation is covered: a payload written elsewhere and moved into place (a rename) does
+  not match.
+references:
+  - https://attack.mitre.org/techniques/T1036/005/
+author: Eric Brown - Nebulock, Inc.
+date: 2026-03-31
+modified: 2026-11-11
+logsource:
+  product: macos
+  category: file_event
+detection:
+  selection_staging_dirs:
+    # Frameworks, bin or lib directly under the vendor directory, not deeper (node_modules, venvs, globalStorage)
+    TargetFilename|re: '.*/Library/Application Support/[^/]+/(Frameworks|bin|lib)/.*'
+  filter_resource_files:
+    TargetFilename|endswith:
+      - '.plist'
+      - '.strings'
+      - '.car'
+      - '.nib'
+      - '.xib'
+      - '.sqlite'
+      - '.xml'
+      - '.css'
+      - '.html'
+  filter_apple_installers:
+    # PackageKit, Installer, Software Update and MDM processes that write package payloads
+    SigningID:
+      - com.apple.installd
+      - com.apple.system_installd
+      - com.apple.package-script-service
+      - com.apple.installer
+      - com.apple.softwareupdate
+      - com.apple.mobile.softwareupdated
+      - com.apple.mdmclient
+  filter_vendor_teams:
+    TeamID:
+      - 483DWKW443  # Jamf
+      - T4SK8ZXCXG  # Mac Admins Open Source (Munki)
+      - JQ525L2MZD  # Adobe
+      - UBF8T346G9  # Microsoft, including Visual Studio Code
+      - 2ZEFAR8TH3  # JetBrains
+      - 9BNSXJN65R  # Docker
+      - EQHXZ8M8AV  # Google
+      - 43AQ936H96  # Mozilla
+      - BQR82RBBHL  # Slack
+      - BJ4HAAB9B3  # Zoom
+      - 2FNC3A47ZF  # Spotify
+      - 53Q6R32WPB  # Discord
+      - 2BUA8C4S2C  # 1Password
+  condition: selection_staging_dirs and not 1 of filter_*
+falsepositives:
+  - Application auto-update mechanisms extracting new framework versions
+  - Plugin or extension systems downloading and installing modules at runtime
+  - Development tools staging build artifacts in Application Support
+  - Package postinstall scripts (their shell and copy tools aren't the PackageKit processes)
+  - MDM agents and vendors without a team ID above; add theirs with a Sigma filter
+fields:
+  - TargetFilename
+  - Image
+  - SigningID
+  - TeamID
+  - User
+tags:
+  - attack.stealth
+  - attack.t1036.005
+level: medium
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: silent
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

@@ -10,22 +10,18 @@ description: 'Detects creation, deletion, or modification of user accounts via O
 
   '
 author: Eric Brown - Nebulock, Inc.
-date: 2025/10/31
-modified: 2025/10/31
+date: 2025-10-31
+modified: 2026-11-11
 references:
 - https://attack.mitre.org/techniques/T1136/001/
 - https://attack.mitre.org/techniques/T1098/
 logsource:
   product: macos
-  service: endpointsecurity
+  category: user_account_change
 detection:
   selection:
-    esf.event_type:
-    - 141  # ES_EVENT_TYPE_NOTIFY_OD_CREATE_USER
-    - 142  # ES_EVENT_TYPE_NOTIFY_OD_DELETE_USER
-    - 143  # ES_EVENT_TYPE_NOTIFY_OD_DISABLE_USER
-    - 144  # ES_EVENT_TYPE_NOTIFY_OD_ENABLE_USER
-    - 148  # ES_EVENT_TYPE_NOTIFY_OD_MODIFY_PASSWORD
+    # every ESF event has an acting process: the category does the scoping
+    Image|startswith: /
   condition: selection
 falsepositives:
 - IT administration and user provisioning
@@ -33,13 +29,23 @@ falsepositives:
 - User self-service password changes
 - Automated user lifecycle management
 fields:
-- event_type
-- event_name
-- User
-- target_user
 - ProcessId
+- User
 tags:
 - attack.persistence
 - attack.t1136.001
 - attack.t1098
 level: high
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified

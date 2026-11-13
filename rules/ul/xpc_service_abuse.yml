@@ -1,5 +1,5 @@
 title: macOS XPC Service Abuse
-id: e5f6a7b8-c9d0-4123-ef01-234567890123
+id: 80dd24d2-717b-4f4d-a127-a587eed69627
 status: experimental
 description: |
   Detects potential abuse of XPC (Inter-Process Communication) services.
@@ -9,8 +9,8 @@ references:
   - https://attack.mitre.org/techniques/T1559/
   - https://wojciechregula.blog/post/learn-xpc-exploitation-part-1/
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/22
-modified: 2025/01/22
+date: 2025-01-22
+modified: 2026-11-11
 logsource:
   product: macos
   service: unifiedlog
@@ -37,6 +37,19 @@ falsepositives:
   - Development/testing environments
 level: medium
 tags:
-  - attack.privilege_escalation
+  - attack.privilege-escalation
   - attack.execution
   - attack.t1559
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: silent
+      elastic-esql: silent
+      opensearch: silent
+      splunk: silent
+      clickhouse: silent
+      logscale: fails
+      kusto: fails
+      defend: fails
+      jamf-protect: not-verified

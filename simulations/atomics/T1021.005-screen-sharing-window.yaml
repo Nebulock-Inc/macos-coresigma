@@ -1,0 +1,28 @@
+attack_technique: T1021.005
+display_name: "Remote Services: VNC"
+atomic_tests:
+  - name: Hands-on Window for a Screen Sharing Connection (2026 macOS)
+    description: |
+      A recording window for a hands-on step: while it is open, a person connects to the test host with Screen Sharing. The command only shows a countdown in Terminal; the connection is the person's.
+
+      Fidelity limits:
+      - The connection is made by hand, over the operator's own tunnel; nothing here changes Screen Sharing's settings
+      - The window lasts 4 minutes; run it with SIM_TIMEOUT=300 so run_sim.sh waits for it
+      - Other GUI activity can fall inside the window, so its sim_windows.json entry lists the one rule it counts for
+
+      Expected telemetry: an ESF screensharing_attach event (and screensharing_detach when the person disconnects later). Observed on macOS 26.7: screensharingd and ScreensharingAgent started inside the window, but ES delivered no screensharing_attach or screensharing_detach.
+
+      Falcon block status: not blocked (2026-11-13 15:55Z run; macOS 26.7)
+    supported_platforms:
+      - macos
+    executor:
+      name: bash
+      elevation_required: false
+      command: |
+        set -e
+        echo "coreSigma hands-on window: connect with Screen Sharing now. This window closes in 4 minutes."
+        for left in $(seq 240 -10 10); do printf '\r%3d s left ' "$left"; sleep 10; done
+        echo; echo "Screen Sharing window closed"
+      cleanup_command: |
+        echo "Nothing to clean up; the Screen Sharing session is the operator's"
+        echo "Cleanup complete"

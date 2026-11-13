@@ -1,17 +1,15 @@
 title: macOS ESF Suspicious File Creation in Persistence Locations
-id: b2c3d4e5-f6a7-8901-bcde-f23456789012
+id: 18d6dc1e-8440-4894-9f48-988bf438b694
 status: experimental
 description: Detects file creation in macOS persistence locations that could indicate malware installation
 author: Eric Brown - Nebulock, Inc.
-date: 2025/01/15
-modified: 2025/01/15
+date: 2025-01-15
+modified: 2026-11-11
 logsource:
     product: macos
-    service: endpointsecurity
-    category: file_create
+    category: file_event
 detection:
     selection:
-        event.action: create
         TargetFilename|contains:
             - '/Library/LaunchAgents'
             - '/Library/LaunchDaemons'
@@ -26,4 +24,19 @@ falsepositives:
 level: high
 tags:
     - attack.persistence
-
+    - attack.t1543.001
+    - attack.t1543.004
+    - attack.t1037.005
+custom:
+  coresigma:
+    status: verified
+    verdict:
+      elastic-eql: fires
+      elastic-esql: fires
+      opensearch: fires
+      splunk: fires
+      clickhouse: fires
+      logscale: fails
+      kusto: converts
+      defend: converts
+      jamf-protect: not-verified

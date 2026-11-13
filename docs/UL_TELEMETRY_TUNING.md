@@ -1,216 +1,52 @@
-# Unified Logging (UL) Telemetry Tuning Analysis
+# Unified Log Collection
 
-## Current UL Collector Configuration
+## What the UL collector collects
 
-The current UL collector monitors these security-critical subsystems:
+`collectors/ul_collector.py` runs:
 
-```python
-SECURITY_SUBSYSTEMS = [
-    "com.apple.TCC",           # Privacy/permissions
-    "com.apple.sudo",          # Privilege escalation
-    "com.apple.gatekeeper",    # App signing/notarization
-    "com.apple.syspolicy",     # System policy enforcement
-    "com.apple.securityd",     # Security daemon
-    "com.apple.alf",           # Application Layer Firewall
-    "com.apple.opendirectoryd", # Directory services
-    "com.apple.authorization", # Authorization framework
-]
+```bash
+log stream --style ndjson --level info --predicate '<every UL category, ORed>'
 ```
 
-## Signal vs Noise Analysis
+On startup it also reads the last 5 minutes with `log show` (`--no-recent` skips that). There is no message filter in the collector: every line the predicate delivers is sent.
 
-### High-Value Subsystems (Keep All)
+The predicate comes from `UL_CATEGORIES` in `pipelines/pysigma-pipeline-macos/sigma/pipelines/macos/taxonomy.py`, the same table `macos_ul_ecs` turns a rule's `category` into. The collector's comparisons are case-insensitive (`[c]`).
 
-| Subsystem | Security Value | Volume | Recommendation |
-|-----------|---------------|--------|----------------|
-| `com.apple.TCC` | **Critical** - Privacy bypass detection | Low-Medium | Keep all |
-| `com.apple.sudo` | **Critical** - Privilege escalation | Low | Keep all |
-| `com.apple.securityd` | **High** - Code signing, keychain | Medium | Keep all |
-| `com.apple.gatekeeper` | **High** - Malware prevention | Low | Keep all |
-| `com.apple.syspolicy` | **High** - System Integrity Protection | Low | Keep all |
+| Category | Lines selected |
+|---|---|
+| `tcc` | subsystem starts with `com.apple.TCC` |
+| `authorization` | subsystem `com.apple.Authorization` |
+| `sudo` | process `/usr/bin/sudo` (sudo logs with an empty subsystem) |
+| `firewall` | subsystem starts with `com.apple.ALF` |
+| `gatekeeper` | subsystem starts with `com.apple.syspolicy`, or process `/usr/libexec/syspolicyd` |
+| `launchd` | process `/sbin/launchd` |
+| `xprotect` | subsystem starts with `com.apple.xprotect` (both casings: `com.apple.XProtectFramework...` too) |
+| `securityd` | subsystem `com.apple.securityd` (Security.framework logging, from any process) |
+| `opendirectory` | subsystem starts with `com.apple.opendirectoryd` |
+| `mdm` | process path ends with `/mdmclient` |
 
-### Medium-Value Subsystems (Keep with Filtering)
+A UL rule without a `category` (`product: macos`, `service: unifiedlog` only) isn't scoped to any of these; it runs on everything the collector sent.
 
-| Subsystem | Security Value | Volume | Recommendation |
-|-----------|---------------|--------|----------------|
-| `com.apple.alf` | **Medium** - Firewall events | Medium | Filter routine |
-| `com.apple.authorization` | **Medium** - Auth requests | High | Filter routine |
-| `com.apple.opendirectoryd` | **Medium** - User/group changes | Medium | Filter lookups |
+## What it doesn't collect
 
-### Recommended Additional Subsystems
+These limits are in the [support matrix](SUPPORT_MATRIX.md) footnotes for the rules they affect.
 
-| Subsystem | Security Value | Why Add |
-|-----------|---------------|---------|
-| `com.apple.ManagedClient` | **High** | MDM profile changes, enterprise attacks |
-| `com.apple.xpc` | **High** | IPC security, privilege escalation |
-| `com.apple.launchd` | **High** | Persistence mechanisms |
-| `com.apple.authd` | **High** | Authentication decisions |
-| `com.apple.networkd` | **Medium** | Network configuration changes |
-| `com.apple.kernel` | **Critical** | Kernel-level security events |
+- **launchd**: `log stream` never delivers `/sbin/launchd`'s lines (`log show` does). Rules on the `launchd` category can't fire on live collection.
+- **XPC and DNS**: there is no category for `com.apple.xpc` or `com.apple.network`, so macOS XPC Service Abuse and the DNS resolution failure rules see only lines that another category happens to select.
+- **sudo on some hosts**: where sudoers sets `Defaults !log_allowed`, sudo logs only denials, so rules on successful sudo runs see nothing.
+- **Info level**: some lines are logged at Info level and arrive only with `--level info`, which the collector uses. A capture made without it reads those rules as silent.
+- **Case on some targets**: the collector selects both XProtect casings, but ES|QL and OpenSearch match `unified_log.subsystem` case-sensitively, so a rule's `com.apple.xprotect` prefix misses the uppercase lines there.
 
-## Noise Filtering Strategies
+## Adding a source
 
-### 1. Message-Level Filtering
-
-**High Noise Messages to Filter:**
-```python
-NOISE_PATTERNS = [
-    # TCC routine checks (not denials)
-    r"Checking access.*kTCCService.*allowed",
-    r"Request completed.*success",
-    
-    # Authorization routine lookups
-    r"AuthorizationCopyRights.*succeeded",
-    r"Authorization check.*passed",
-    
-    # OpenDirectory routine queries
-    r"ODQuery.*completed",
-    r"ODNode.*opened",
-    
-    # Firewall routine operations
-    r"socketfilterfw.*process.*allowed",
-]
-```
-
-**High Signal Messages to Always Keep:**
-```python
-SIGNAL_PATTERNS = [
-    # TCC denials and modifications
-    r"(denied|Denied|DENIED)",
-    r"kTCCService.*(Camera|Microphone|ScreenCapture|SystemPolicyAllFiles)",
-    r"TCC.*modify",
-    
-    # Sudo/privilege escalation
-    r"COMMAND=",
-    r"USER=root",
-    r"authentication (failed|succeeded)",
-    
-    # Security policy violations
-    r"(rejected|blocked|invalid|failed|violation)",
-    r"code signature",
-    r"notarization",
-    
-    # Gatekeeper blocks
-    r"quarantine",
-    r"XProtect",
-    r"assessment failed",
-]
-```
-
-### 2. Category-Level Filtering
-
-Add category filtering to reduce volume:
+To collect another subsystem or process, add a category to `UL_CATEGORIES` in `taxonomy.py`, for example:
 
 ```python
-# Categories to always include
-HIGH_VALUE_CATEGORIES = [
-    "security",
-    "authentication", 
-    "authorization",
-    "privacy",
-    "policy",
-]
-
-# Categories to filter (only keep errors)
-FILTER_TO_ERRORS = [
-    "network",
-    "system",
-    "default",
-]
+"managedclient": UlCategory(raw=[("subsystem", "=", "com.apple.ManagedClient")]),
 ```
 
-### 3. Level-Based Filtering
+The collector's predicate and the pipelines' category scope both follow. Rules can then use `category: managedclient`. Volume grows with every category, and `log stream` doesn't deliver every process's lines (launchd above), so check that lines arrive (`log stream --style ndjson --predicate 'subsystem == "com.apple.ManagedClient"'`) before writing rules on them.
 
-Current: `--level info`
+## Noise
 
-Recommended adjustment by subsystem:
-
-| Subsystem | Recommended Level |
-|-----------|------------------|
-| `com.apple.TCC` | info (keep all) |
-| `com.apple.sudo` | info (keep all) |
-| `com.apple.securityd` | info |
-| `com.apple.gatekeeper` | info |
-| `com.apple.alf` | notice (reduce noise) |
-| `com.apple.authorization` | notice (reduce noise) |
-| `com.apple.opendirectoryd` | notice |
-
-## Estimated Volume Reduction
-
-| Current | After Tuning | Reduction |
-|---------|--------------|-----------|
-| ~10,000 events/hour | ~2,000 events/hour | 80% |
-
-## Security Coverage Matrix
-
-| Attack Technique | MITRE ID | UL Subsystem | Detection Capability |
-|-----------------|----------|--------------|---------------------|
-| TCC Bypass | T1548 | `com.apple.TCC` | Full coverage |
-| Privilege Escalation | T1548.003 | `com.apple.sudo` | Full coverage |
-| Gatekeeper Bypass | T1553.001 | `com.apple.gatekeeper` | Full coverage |
-| Code Signing Bypass | T1553.002 | `com.apple.securityd` | Full coverage |
-| Firewall Manipulation | T1562.004 | `com.apple.alf` | Full coverage |
-| Credential Access | T1555 | `com.apple.securityd` | Partial |
-| Persistence | T1543 | `com.apple.launchd` | **Missing - Add** |
-| MDM Manipulation | T1484 | `com.apple.ManagedClient` | **Missing - Add** |
-
-## Recommended UL Collector Updates
-
-### Updated Subsystem List
-
-```python
-SECURITY_SUBSYSTEMS = [
-    # Critical - Keep all events
-    "com.apple.TCC",
-    "com.apple.sudo",
-    "com.apple.securityd",
-    "com.apple.gatekeeper",
-    "com.apple.syspolicy",
-    
-    # High - Keep with filtering
-    "com.apple.alf",
-    "com.apple.authorization",
-    "com.apple.opendirectoryd",
-    
-    # New additions
-    "com.apple.ManagedClient",    # MDM/enterprise
-    "com.apple.launchd",          # Persistence
-    "com.apple.xpc",              # IPC security
-    "com.apple.authd",            # Auth decisions
-]
-```
-
-### Message Filtering Implementation
-
-```python
-def should_keep_ul_event(self, event: Dict[str, Any]) -> bool:
-    """Filter UL events to reduce noise while preserving security signal."""
-    subsystem = event.get("subsystem", "")
-    message = event.get("eventMessage", "") or event.get("formatString", "")
-    category = event.get("category", "")
-    
-    # Always keep from critical subsystems
-    critical_subsystems = {"com.apple.TCC", "com.apple.sudo", "com.apple.gatekeeper"}
-    if subsystem in critical_subsystems:
-        return True
-    
-    # Always keep security-relevant messages
-    signal_keywords = [
-        "denied", "failed", "rejected", "blocked", "invalid",
-        "violation", "unauthorized", "suspicious", "malware",
-        "quarantine", "xprotect", "codesign", "COMMAND=",
-    ]
-    message_lower = message.lower()
-    if any(kw in message_lower for kw in signal_keywords):
-        return True
-    
-    # Filter routine operations from noisy subsystems
-    noisy_subsystems = {"com.apple.authorization", "com.apple.opendirectoryd", "com.apple.alf"}
-    if subsystem in noisy_subsystems:
-        noise_keywords = ["succeeded", "allowed", "completed", "opened", "passed"]
-        if any(kw in message_lower for kw in noise_keywords):
-            return False
-    
-    # Default: keep
-    return True
-```
+Tune noisy UL rules with Sigma filters ([TUNING_GUIDE.md](TUNING_GUIDE.md)), not by dropping lines in the collector, so other rules keep their data.

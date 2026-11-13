@@ -1,22 +1,34 @@
 title: macOS ESF Rename To Hidden Dotfile
 id: 8d7b7c6e-2f7a-4f8d-8f1b-5a3f0e1a2c44
 status: experimental
-description: Detect renaming a file to a hidden path (dotfile) which may indicate
-  stealthy behavior.
+description: Detect renaming a file to a hidden name (a dotfile), which may indicate
+  stealthy behavior. Only the file name counts, so moves into a hidden directory (such as
+  Move to Trash into ~/.Trash) don't match, and renaming one dotfile to another doesn't either.
 author: Eric Brown - Nebulock, Inc.
 date: 2025-10-29
 logsource:
   product: macos
-  service: endpointsecurity
+  category: file_rename
 level: medium
 detection:
-  selection_evt:
-    esf.event_type: 21
-    event.action: rename
-  selection_path:
-    DestinationFilename|contains: '/.'
-    TargetFilename|contains: '/.'
-  condition: selection_evt and (selection_path)
+  selection_hidden_name:
+    TargetFilename|re: '.*/\.[^/]+$'
+  filter_already_hidden:
+    SourceFilename|re: '.*/\.[^/]+$'
+  condition: selection_hidden_name and not filter_already_hidden
 falsepositives:
 - developer tools and dotfile managers
-modified: 2025/01/15
+modified: 2026-11-11
+custom:
+  coresigma:
+    status: not-verified
+    verdict:
+      elastic-eql: noisy
+      elastic-esql: noisy
+      opensearch: noisy
+      splunk: noisy
+      clickhouse: noisy
+      logscale: fails
+      kusto: fails
+      defend: converts
+      jamf-protect: not-verified
