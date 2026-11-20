@@ -148,7 +148,7 @@ python3 scripts/generate_ul_events.py          # UL rules: a broken code signatu
 python3 scripts/generate_ul_events.py --firewall   # also switches the application firewall off and back (asks for sudo)
 ```
 
-Start the matching collector first (ESF or UL, above). Rules are created disabled, so run `python3 scripts/deploy_sigma_rules.py --enable`, then wait a few minutes: Kibana rules run every 5 minutes and the Sigma Rule Triggers dashboard fills from their alerts. Each script prints the rule a step is meant to match; Both take `--dry-run`, which prints the commands (and the file `generate_test_events.py` would write) without running them. Only a few rules fire this way. The rest need actions that aren't safe on a daily-use Mac (a throwaway account, SIP, TCC denials) and were verified with the simulations below. An EDR on the Mac may alert on the broken-signature step.
+Start the matching collector first (ESF or UL, above). Rules are created disabled, so run `python3 scripts/deploy_sigma_rules.py --enable`, then wait a few minutes: Kibana rules run every 5 minutes and the Sigma Rule Triggers dashboard fills from their alerts. Each script prints the rule a step is meant to match. Both take `--dry-run`, which prints the commands (and the file `generate_test_events.py` would write) without running them. Only a few rules fire this way. The rest need actions that aren't safe on a daily-use Mac (a throwaway account, SIP, TCC denials) and were verified with the simulations below. An EDR on the Mac may alert on the broken-signature step.
 
 ### Authentication
 

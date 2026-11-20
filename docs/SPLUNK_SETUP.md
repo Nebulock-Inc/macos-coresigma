@@ -60,15 +60,15 @@ From host:
 From inside container:
 ```bash
 # License information
-docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
+docker exec coresigma-splunk curl -s -k -u "admin:${SPLUNK_PASSWORD:-changeme}" \
   https://localhost:8089/services/licenser/licenses
 
 # License groups
-docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
+docker exec coresigma-splunk curl -s -k -u "admin:${SPLUNK_PASSWORD:-changeme}" \
   https://localhost:8089/services/licenser/groups
 
 # Server info
-docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
+docker exec coresigma-splunk curl -s -k -u "admin:${SPLUNK_PASSWORD:-changeme}" \
   https://localhost:8089/services/server/info
 ```
 
@@ -79,7 +79,7 @@ To verify Splunk Free license from the REST API:
 1. Start Splunk: `./scripts/bench_up.sh splunk`
 2. Check license details:
 ```bash
-docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
+docker exec coresigma-splunk curl -s -k -u "admin:${SPLUNK_PASSWORD:-changeme}" \
   https://localhost:8089/services/licenser/licenses | \
   grep -E "<s:key name=\"(label|quota|status|type)\">"
 ```
@@ -92,7 +92,7 @@ Expected output should include:
 
 3. Verify Free mode is active:
 ```bash
-docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
+docker exec coresigma-splunk curl -s -k -u "admin:${SPLUNK_PASSWORD:-changeme}" \
   https://localhost:8089/services/server/info/server-info | \
   grep -E "<s:key name=\"isFree\">"
 ```

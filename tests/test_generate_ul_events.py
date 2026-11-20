@@ -71,3 +71,26 @@ def test_firewall_that_does_not_switch_is_reported(monkeypatch, capsys):
     gen.firewall_toggle(False)
     out = capsys.readouterr().out
     assert "didn't switch" in out and "restored: yes" in out
+
+
+def test_other_exec_error_is_not_called_an_intel_mac(monkeypatch, capsys):
+    def lipo(cmd):
+        Path(cmd[-1]).write_bytes(b"\0" * 16200)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    def exec_copy(cmd):
+        raise OSError(1, "Operation not permitted")
+    monkeypatch.setattr(gen, "run", fake_run({"lipo": lipo, "otool": lambda c: subprocess.CompletedProcess(c, 0, OTOOL, ""),
+                                              "coresigma-gen": exec_copy}))
+    monkeypatch.setattr(gen.time, "sleep", lambda s: None)
+    gen.broken_signature(False)
+    out = capsys.readouterr().out
+    assert "Apple silicon" not in out and "didn't start" in out
+
+
+def test_unreadable_state_after_toggle_is_not_called_a_refusal(monkeypatch, capsys):
+    answers = iter(["Firewall is enabled. (State = 1)", "", "Firewall is enabled. (State = 1)"])
+    monkeypatch.setattr(gen, "run", fake_run({"--getglobalstate": lambda c: subprocess.CompletedProcess(c, 0, next(answers), "")}))
+    monkeypatch.setattr(gen.time, "sleep", lambda s: None)
+    gen.firewall_toggle(False)
+    out = capsys.readouterr().out
+    assert "couldn't read the firewall state" in out and "didn't switch" not in out

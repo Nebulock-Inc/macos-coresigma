@@ -101,7 +101,7 @@ This creates a limited-scope API key and optionally stores it in `~/.coresigma/c
 
 ```bash
 export ES_USER=elastic
-export ES_PASSWORD=<your elastic password>
+export ES_PASSWORD='<your elastic password>'  # replace with your Elasticsearch password
 ```
 
 With the Docker bench (Step 3, Option A), the password is `ELASTIC_PASSWORD` in `.env` (`.env.example` ships `changeme`; `bench_up.sh` copies it unchanged):

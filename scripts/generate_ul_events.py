@@ -20,6 +20,7 @@ An EDR on this Mac may alert on the broken-signature step. Run it on a Mac you m
     python3 scripts/generate_ul_events.py [--firewall] [--dry-run]
 """
 import argparse
+import errno
 import re
 import shutil
 import subprocess
@@ -71,8 +72,12 @@ def broken_signature(dry_run):
         run(["codesign", "--verify", "--verbose=2", copy], dry_run)
         try:
             killed = run([copy, "coresigma-gen"], dry_run).returncode  # the kernel kills it during exec; that is the point
-        except OSError as e:  # an Intel Mac can thin /bin/echo to arm64e but can't run it ("Bad CPU type")
-            print(f"    skipped: can't run the arm64e copy here ({e.strerror}); this step needs an Apple silicon Mac")
+        except OSError as e:
+            if e.errno == errno.EBADARCH:  # an Intel Mac can thin /bin/echo to arm64e but can't run it ("Bad CPU type")
+                print("    skipped: can't run the arm64e copy here; this step needs an Apple silicon Mac")
+            else:  # e.g. the kernel refused the exec outright: the log line may still have been written
+                print(f"    the tampered copy didn't start ({e.strerror}); check the log for the CodeSignature Failure line")
+            killed = 1  # so the crash-report cleanup below still runs
     finally:
         if not dry_run:
             shutil.rmtree(work, ignore_errors=True)
@@ -104,7 +109,9 @@ def firewall_toggle(dry_run):
         # starting off, this turns it on and the restore turns it off again: the off line comes from the restore
         if not dry_run:
             now = re.search(r"State = (\d)", run(["sudo", FIREWALL, "--getglobalstate"], False).stdout)
-            if not now or now.group(1) == state:
+            if not now:
+                print("    couldn't read the firewall state after the toggle (sudo?); check the log for a Firewall Disabled line")
+            elif now.group(1) == state:
                 print("    the firewall didn't switch (sudo refused, or MDM manages it): no Firewall Disabled line will be logged")
             else:
                 time.sleep(2)
