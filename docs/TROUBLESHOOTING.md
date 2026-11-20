@@ -114,10 +114,12 @@ They flush what they still hold before exiting, which can take a few seconds; wa
    curl -s -u "elastic:$ES_PASSWORD" "http://localhost:9200/macos-telemetry-ul-*/_count?pretty"
    ```
 
-4. **Generate fresh test data** (benign local commands that a few rules match, while the ESF collector runs):
+4. **Generate fresh test data** (benign local commands that a few rules match, while the matching collector runs):
    ```bash
-   python3 scripts/generate_test_events.py
+   python3 scripts/generate_test_events.py     # ESF rules, with the ESF collector running
+   python3 scripts/generate_ul_events.py       # UL rules, with the UL collector running (--firewall also toggles the firewall)
    ```
+   Rules are created disabled: `python3 scripts/deploy_sigma_rules.py --enable`, then wait a few minutes for alerts.
 
 ---
 

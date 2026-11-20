@@ -346,7 +346,7 @@ def _post(url, body, auth=None):
 def _splunk(search, earliest=0, latest="now"):
     """Result rows of a Splunk search, through the bench container: Splunk Free refuses remote REST logins."""
     out = subprocess.run(
-        ["docker", "exec", "splunk", "curl", "-sk", "-w", "\n%{http_code}", "-u",
+        ["docker", "exec", "coresigma-splunk", "curl", "-sk", "-w", "\n%{http_code}", "-u",
          f"admin:{setting('SPLUNK_PASSWORD', 'changeme')}", "https://localhost:8089/services/search/jobs/export",
          "--data-urlencode", f"search={search}",
          "-d", "output_mode=json", "-d", "preview=false", "-d", f"earliest_time={earliest}", "-d", f"latest_time={latest}"],

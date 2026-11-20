@@ -149,7 +149,7 @@ All fields: [FIELD_NAME_ORIGINS.md](FIELD_NAME_ORIGINS.md). There are no `esf.*`
 
 Check Kibana logs:
 ```bash
-docker logs kibana
+docker logs coresigma-kibana
 ```
 
 Verify Elasticsearch is accessible:

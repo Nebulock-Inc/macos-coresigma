@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.1 - 2026-11-20
+
+### Fixes
+
+- `scripts/generate_test_events.py` takes `--dry-run`, which prints each command and the LaunchAgents file it would write without running or writing anything. It used to ignore its arguments, so `--dry-run` (or any typo) ran every step for real; unknown arguments now stop it before anything runs.
+- The event generators don't stop part-way: `generate_test_events.py` skips the LaunchAgents step on an account without `~/Library/LaunchAgents` (it used to stop there) and removes its `/tmp/test_exec_*` file; `generate_ul_events.py` skips the broken-signature step on an Intel Mac instead of crashing, says so when the firewall doesn't switch (MDM-managed, or sudo refused) instead of waiting for a log line that won't come, and writes nothing on `--dry-run`. It names an exec error other than an Intel Mac's "Bad CPU type" instead of calling it one, and says when it can't read the firewall state.
+- `scripts/generate_ul_events.py` generates Unified Log events for two UL rules (a broken code signature, and with `--firewall` the application firewall toggled), each verified by the matching simulation. The README, `docs/TROUBLESHOOTING.md` and `generate_test_events.py` now say which script covers ESF and which covers UL, and that rules must be enabled.
+- The README's Simulations section is a table, grouped lists and a short "Running one" block instead of one long paragraph, and the convert examples say that a directory converts every rule (`--skip-unsupported` skips the ones that can't convert).
+- The Unified Logging and Sigma Rule Triggers dashboards in `exports/all_dashboards_latest.ndjson` import and open in Kibana. Their panels had no `embeddableConfig` and their references were named `panel_0`, not Kibana 8's `panel_0:panel_panel_0`, so opening either dashboard failed with "Cannot read properties of undefined (reading 'savedObjectId')". Import the file again with `overwrite=true`.
+- The README and `docs/INSTALLATION.md` say how to log in to Kibana (user `elastic`, the `ELASTIC_PASSWORD` from `.env`) and Splunk, and no longer show `changeme` as the password to export or put in the config file.
+- `scripts/bench_up.sh` stops with a "start Docker first" message when the Docker engine isn't running. It used to fail on the first image pull.
+- The bench containers are named `coresigma-elasticsearch`, `coresigma-kibana`, `coresigma-splunk` and so on. They were `elasticsearch`, `kibana`, `splunk`…, which clash with any other container of the same name, even a stopped one. After upgrading, `bench_up.sh` recreates the containers under the new names and keeps their data volumes. Splunk's coreSigma app isn't in a volume, so copy it into the new `coresigma-splunk` container again (see `docs/SPLUNK_SETUP.md`). Its HEC input isn't in a volume either, so `bench_up.sh splunk` creates a new `SPLUNK_HEC_TOKEN` in `.env`: update any collector config that holds the old token (`~/.coresigma`, or the Keychain item) and restart the collector, or HEC answers 403 and events go to the spool.
+
 ## 2.0 - 2026-11-13
 
 coreSigma 2.0 rebuilds the pipeline around eslogger's event names, ships the pySigma plugin, and measures each of the 69 rules against replayed captures from a live test host.

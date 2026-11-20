@@ -5,7 +5,7 @@
 services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.25
-    container_name: elasticsearch
+    container_name: coresigma-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=true
@@ -26,7 +26,7 @@ services:
   # Setup service - runs once to configure kibana_system user
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.25
-    container_name: setup
+    container_name: coresigma-setup
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -53,7 +53,7 @@ services:
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.19.25
-    container_name: kibana
+    container_name: coresigma-kibana
     ports:
       - "127.0.0.1:5601:5601"
     environment:
@@ -78,7 +78,7 @@ services:
 
   splunk:
     image: splunk/splunk:9.4
-    container_name: splunk
+    container_name: coresigma-splunk
     platform: linux/amd64
     profiles:
       - splunk
@@ -99,7 +99,7 @@ services:
 
   opensearch:
     image: opensearchproject/opensearch:2.19.1
-    container_name: opensearch
+    container_name: coresigma-opensearch
     profiles:
       - opensearch
     environment:
@@ -118,7 +118,7 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.8
-    container_name: clickhouse
+    container_name: coresigma-clickhouse
     profiles:
       - clickhouse
     environment:
