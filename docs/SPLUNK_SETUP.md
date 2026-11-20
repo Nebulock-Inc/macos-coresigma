@@ -48,7 +48,7 @@ The bench stack is pre-configured with:
 - **Web UI:** http://127.0.0.1:8000
 - **Management API:** https://localhost:8089 (not exposed outside container, use `docker exec`)
 - **Username:** admin
-- **Password:** Set in `.env` as `SPLUNK_PASSWORD` (default: changeme)
+- **Password:** Set in `.env` as `SPLUNK_PASSWORD` (default: changeme). The commands below read it from the shell: `set -a; . ./.env; set +a`
 
 ### REST API Examples
 
@@ -60,15 +60,15 @@ From host:
 From inside container:
 ```bash
 # License information
-docker exec splunk curl -s -k -u admin:changeme \
+docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
   https://localhost:8089/services/licenser/licenses
 
 # License groups
-docker exec splunk curl -s -k -u admin:changeme \
+docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
   https://localhost:8089/services/licenser/groups
 
 # Server info
-docker exec splunk curl -s -k -u admin:changeme \
+docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
   https://localhost:8089/services/server/info
 ```
 
@@ -79,7 +79,7 @@ To verify Splunk Free license from the REST API:
 1. Start Splunk: `./scripts/bench_up.sh splunk`
 2. Check license details:
 ```bash
-docker exec splunk curl -s -k -u admin:changeme \
+docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
   https://localhost:8089/services/licenser/licenses | \
   grep -E "<s:key name=\"(label|quota|status|type)\">"
 ```
@@ -92,7 +92,7 @@ Expected output should include:
 
 3. Verify Free mode is active:
 ```bash
-docker exec splunk curl -s -k -u admin:changeme \
+docker exec coresigma-splunk curl -s -k -u "admin:$SPLUNK_PASSWORD" \
   https://localhost:8089/services/server/info/server-info | \
   grep -E "<s:key name=\"isFree\">"
 ```
@@ -117,8 +117,8 @@ To install it, copy the app into `$SPLUNK_HOME/etc/apps/` and restart Splunk. On
 
 ```bash
 python3 scripts/deploy_sigma_rules.py --target splunk
-docker cp splunk/coresigma_app splunk:/opt/splunk/etc/apps/
-docker restart splunk
+docker cp splunk/coresigma_app coresigma-splunk:/opt/splunk/etc/apps/
+docker restart coresigma-splunk
 ```
 
 The bench keeps only `/opt/splunk/var` in a volume, so copy the app again after the container is recreated.

@@ -92,6 +92,9 @@ Elastic Defend 9.5.6 (detect mode) and Microsoft Defender for Endpoint (passive 
 # (or store them in the macOS Keychain with ./scripts/setup_credentials.sh)
 export ES_USER=elastic ES_PASSWORD="$(grep '^ELASTIC_PASSWORD=' .env | cut -d= -f2-)"
 
+# Kibana: http://localhost:5601, user "elastic", password = ELASTIC_PASSWORD in .env
+# (.env.example ships "changeme"; Splunk: user "admin", SPLUNK_PASSWORD in .env)
+
 # Detection rules into Kibana (created disabled; --enable enables them)
 python3 scripts/deploy_sigma_rules.py
 
@@ -135,6 +138,18 @@ curl -X POST "http://localhost:5601/api/saved_objects/_import?overwrite=true" \
   -F file=@exports/all_dashboards_latest.ndjson
 ```
 
+### Triggering rules locally
+
+With a collector running, two scripts run harmless local commands that a few rules match:
+
+```bash
+python3 scripts/generate_test_events.py        # ESF rules: bash -c, curl, ssh -V, /etc reads, a dotfile in /tmp...
+python3 scripts/generate_ul_events.py          # UL rules: a broken code signature (needs the Xcode Command Line Tools)
+python3 scripts/generate_ul_events.py --firewall   # also switches the application firewall off and back (asks for sudo)
+```
+
+Start the matching collector first (ESF or UL, above). Rules are created disabled, so run `python3 scripts/deploy_sigma_rules.py --enable`, then wait a few minutes: Kibana rules run every 5 minutes and the Sigma Rule Triggers dashboard fills from their alerts. Each script prints the rule a step is meant to match; Both take `--dry-run`, which prints the commands (and the file `generate_test_events.py` would write) without running them. Only a few rules fire this way. The rest need actions that aren't safe on a daily-use Mac (a throwaway account, SIP, TCC denials) and were verified with the simulations below. An EDR on the Mac may alert on the broken-signature step.
+
 ### Authentication
 
 Where each tool looks for Elasticsearch and Kibana credentials, first match wins:
@@ -153,13 +168,14 @@ Where each tool looks for Elasticsearch and Kibana credentials, first match wins
 ## Converting rules
 
 ```bash
-# One ESF rule to EQL
+# One ESF rule to EQL (pass a directory, rules/esf/, to convert them all; add --skip-unsupported
+# so a rule that can't convert is skipped instead of stopping the run)
 sigma convert -t eql -p macos_esf_ecs rules/esf/macos_dscl_authonly_password_check.yml
 
 # Unified Log rules need macos_ul_ecs; stack both pipelines to convert ESF and UL rules together
 sigma convert -t splunk -p macos_esf_ecs -p macos_ul_ecs rules/ul/
 
-# Falcon LogScale: process_creation rules only
+# Falcon LogScale: process_creation rules only (a directory with --skip-unsupported converts those and skips the rest)
 sigma convert -t log_scale -p macos_falcon rules/esf/process_execution_suspicious.yml
 ```
 
@@ -169,7 +185,40 @@ Convert a correlation together with its base rules, as the deploy and matrix scr
 
 ## Simulations
 
-`simulations/atomics/` holds 36 Atomic Red Team-style simulations. Six are attack chains: paste-to-stealer, npm postinstall persistence, Gatekeeper quarantine strip and ad-hoc signing, an SSH key login to localhost, a writable-and-executable memory request, and a quarantine strip, ad-hoc signing and keychain partition-list change in a row (the Gatekeeper evasion correlation). Twenty-seven are single benign steps, one per rule: zip/tar archiving, `openssl enc`, a `dig` lookup, `nc` to localhost, an `scp` copy, a command under `expect`, an `aws s3 cp --dryrun`, a partition list on a throwaway keychain, booting out a dummy launch job, an SMB mount attempt, an image written into a dummy app bundle's code directory, XPC from a binary in `/tmp` and to a dummy `.test.` service, SIGKILL and SIGTERM of stand-in processes named like a security tool and BackgroundTaskManagementAgent, fifteen dummy processes terminated from one shell, credential-named dummy files read by a `node` stand-in, an admin authorization right requested without interaction, `spctl` assessing an unsigned binary, a throwaway local account created and deleted, a `sudo` refused for a throwaway non-sudoer, the firewall switched on and back off, a `csrutil disable` refused outside recoveryOS, a copy of `echo` with a broken signature run, a dummy file written and deleted in `/private/etc`, `perl` sending SIGTERM to a dummy process, and a failed lookup and wrong-password unlock on a throwaway keychain. Three are hands-on windows: a person connects with Screen Sharing, clicks Open Anyway for a quarantined test app, or runs a one-line script in Script Editor, and each window counts only for its one rule (the window's `rules` list in `reports/sim_windows.json`). Hands-on windows run longer than the 120 s the run script waits by default: set `SIM_TIMEOUT` (seconds, at most 540). Each one cleans up after itself. `simulations/run_sim.sh <atomic-name> <test-index>` runs one on an EC2 Mac over SSM and records its time window in `reports/sim_windows.json`, from the host's clock and ending before the cleanup. Copy `simulations/sim.env.example` to `simulations/sim.env` (gitignored) and fill in the instance, the AWS account the script checks before sending anything, and the profile. `DRY_RUN=true` prints what it would run instead of running it.
+`simulations/atomics/` holds 36 Atomic Red Team-style simulations, one YAML file each. They come in three kinds:
+
+| Kind | Count | What it is |
+|---|---|---|
+| Attack chains | 6 | Several steps in a row |
+| Single benign steps | 27 | One harmless action per rule |
+| Hands-on windows | 3 | A person does the action while a window is recorded |
+
+**Attack chains**
+- paste-to-stealer
+- npm postinstall persistence
+- Gatekeeper quarantine strip and ad-hoc signing
+- an SSH key login to localhost
+- a writable-and-executable memory request
+- a quarantine strip, ad-hoc signing and keychain partition-list change in a row (the Gatekeeper evasion correlation)
+
+**Single benign steps**
+- *Files and tools:* zip/tar archiving, `openssl enc`, a `dig` lookup, `nc` to localhost, an `scp` copy, a command under `expect`, an `aws s3 cp --dryrun`, a copy of `echo` with a broken signature run, a dummy file written and deleted in `/private/etc`, an image written into a dummy app bundle's code directory
+- *Keychain and accounts:* a partition list on a throwaway keychain, a failed lookup and wrong-password unlock on a throwaway keychain, a throwaway local account created and deleted, an admin authorization right requested without interaction, a `sudo` refused for a throwaway non-sudoer
+- *Processes and signals:* booting out a dummy launch job, SIGKILL and SIGTERM of stand-in processes named like a security tool and BackgroundTaskManagementAgent, fifteen dummy processes terminated from one shell, `perl` sending SIGTERM to a dummy process, credential-named dummy files read by a `node` stand-in
+- *System state and IPC:* the firewall switched on and back off, a `csrutil disable` refused outside recoveryOS, `spctl` assessing an unsigned binary, an SMB mount attempt, XPC from a binary in `/tmp` and to a dummy `.test.` service
+
+**Hands-on windows** (a person connects with Screen Sharing, clicks Open Anyway for a quarantined test app, or runs a one-line script in Script Editor). Each window counts only for its one rule, listed in the window's `rules` entry in `reports/sim_windows.json`. They run longer than the 120 s the run script waits by default, so set `SIM_TIMEOUT` (seconds, at most 540).
+
+Every simulation cleans up after itself.
+
+### Running one
+
+```bash
+cp simulations/sim.env.example simulations/sim.env   # gitignored; fill in the instance, the AWS account and the profile
+simulations/run_sim.sh <atomic-name> <test-index>    # DRY_RUN=true prints what it would run instead
+```
+
+`run_sim.sh` runs the atomic on an EC2 Mac over SSM and records its time window in `reports/sim_windows.json`, from the host's clock and ending before the cleanup. It checks the AWS account in `sim.env` before sending anything.
 
 Run simulations only on a dedicated test host. Never run them on a production, managed or MDR-monitored Mac: they fetch and run payloads, prompt for passwords, and write persistence.
 

@@ -101,13 +101,15 @@ This creates a limited-scope API key and optionally stores it in `~/.coresigma/c
 
 ```bash
 export ES_USER=elastic
-export ES_PASSWORD=changeme
+export ES_PASSWORD=<your elastic password>
 ```
 
-With the Docker bench (Step 3, Option A), the password is in `.env`:
+With the Docker bench (Step 3, Option A), the password is `ELASTIC_PASSWORD` in `.env` (`.env.example` ships `changeme`; `bench_up.sh` copies it unchanged):
 ```bash
 export ES_USER=elastic ES_PASSWORD="$(grep '^ELASTIC_PASSWORD=' .env | cut -d= -f2-)"
 ```
+
+The same account logs in to Kibana at http://localhost:5601: user `elastic`, that password. Kibana has no separate user (`kibana_system` is an internal service account). Splunk's login is `admin` with `SPLUNK_PASSWORD` from `.env`.
 
 #### Option D: Config File
 
@@ -116,7 +118,7 @@ Create `~/.coresigma/config.yml`:
 elasticsearch:
   url: http://localhost:9200
   username: elastic
-  password: changeme
+  password: <your elastic password>
   # Or use API key instead:
   # api_key: "your_base64_encoded_api_key"
 ```

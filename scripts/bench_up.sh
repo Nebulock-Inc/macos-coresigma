@@ -180,7 +180,7 @@ setup_splunk() {
     print_info "Setting up Splunk HEC token and index..."
 
     # Check if HEC token already exists via management API (port 8089)
-    local existing=$(docker exec splunk curl -sk -u "$user:$pass" \
+    local existing=$(docker exec coresigma-splunk curl -sk -u "$user:$pass" \
         "https://localhost:8089/servicesNS/nobody/splunk_httpinput/data/inputs/http/$token_name?output_mode=json" 2>/dev/null \
         | grep -o '"token":"[^"]*"' | cut -d'"' -f4 || true)
 
@@ -200,7 +200,7 @@ setup_splunk() {
     local new_token=$(uuidgen | tr '[:upper:]' '[:lower:]')
 
     # Create the HEC input via management API
-    docker exec splunk curl -sk -u "$user:$pass" \
+    docker exec coresigma-splunk curl -sk -u "$user:$pass" \
         -X POST "https://localhost:8089/servicesNS/nobody/splunk_httpinput/data/inputs/http" \
         -d "name=$token_name" \
         -d "token=$new_token" \
@@ -219,7 +219,7 @@ setup_splunk() {
     print_success "Created HEC token: $new_token"
 
     # Create macos index if it doesn't exist
-    docker exec splunk curl -sk -u "$user:$pass" \
+    docker exec coresigma-splunk curl -sk -u "$user:$pass" \
         -X POST "https://localhost:8089/services/data/indexes" \
         -d "name=macos" \
         -d "datatype=event" > /dev/null 2>&1 || true
@@ -271,7 +271,7 @@ setup_opensearch() {
 check_clickhouse() {
     echo "Checking ClickHouse health..."
 
-    if docker exec clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
+    if docker exec coresigma-clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
         print_success "ClickHouse: OK"
         return 0
     else
@@ -285,28 +285,28 @@ setup_clickhouse() {
     print_info "Setting up ClickHouse database and table..."
 
     # Create database if not exists
-    docker exec clickhouse clickhouse-client --query \
+    docker exec coresigma-clickhouse clickhouse-client --query \
         "CREATE DATABASE IF NOT EXISTS coresigma"
 
     # Check if table exists
-    local table_exists=$(docker exec clickhouse clickhouse-client --query \
+    local table_exists=$(docker exec coresigma-clickhouse clickhouse-client --query \
         "EXISTS TABLE coresigma.events" 2>/dev/null || echo "0")
 
     if [ "$table_exists" = "1" ]; then
         print_info "Table coresigma.events already exists"
         # tables from before the column: the ClickHouse backend's correlations read it
-        docker exec clickhouse clickhouse-client --query "ALTER TABLE coresigma.events ADD COLUMN IF NOT EXISTS \
+        docker exec coresigma-clickhouse clickhouse-client --query "ALTER TABLE coresigma.events ADD COLUMN IF NOT EXISTS \
             \`timestamp\` DateTime64(9, 'UTC') DEFAULT parseDateTime64BestEffort(\`@timestamp\`, 9, 'UTC') AFTER \`@timestamp\`"
         # btm.item.type was String before: numeric like signal.number; absent ('') reads 0, as in an Int64 column
-        if [ "$(docker exec clickhouse clickhouse-client --query "SELECT type FROM system.columns WHERE \
+        if [ "$(docker exec coresigma-clickhouse clickhouse-client --query "SELECT type FROM system.columns WHERE \
                 database = 'coresigma' AND table = 'events' AND name = 'btm.item.type'")" = "String" ]; then
-            docker exec clickhouse clickhouse-client --query "ALTER TABLE coresigma.events \
+            docker exec coresigma-clickhouse clickhouse-client --query "ALTER TABLE coresigma.events \
                 UPDATE \`btm.item.type\` = '0' WHERE \`btm.item.type\` = '' SETTINGS mutations_sync = 1"
-            docker exec clickhouse clickhouse-client --query \
+            docker exec coresigma-clickhouse clickhouse-client --query \
                 "ALTER TABLE coresigma.events MODIFY COLUMN \`btm.item.type\` Int64"
         fi
         # tables from before the authentication, sudo, screen sharing, profile, OD, XProtect and Gatekeeper fields
-        docker exec clickhouse clickhouse-client --query "ALTER TABLE coresigma.events \
+        docker exec coresigma-clickhouse clickhouse-client --query "ALTER TABLE coresigma.events \
             ADD COLUMN IF NOT EXISTS \`user.target.name\` String, \
             ADD COLUMN IF NOT EXISTS \`user.target.group.name\` String, \
             ADD COLUMN IF NOT EXISTS \`source.user.name\` String, \
@@ -332,7 +332,7 @@ setup_clickhouse() {
     fi
 
     # Create table with the specified columns
-    docker exec clickhouse clickhouse-client --query "
+    docker exec coresigma-clickhouse clickhouse-client --query "
     CREATE TABLE IF NOT EXISTS coresigma.events (
         \`@timestamp\` String,
         \`timestamp\` DateTime64(9, 'UTC') DEFAULT parseDateTime64BestEffort(\`@timestamp\`, 9, 'UTC'),  -- the ClickHouse backend's correlations read it
@@ -414,6 +414,15 @@ if [ $# -eq 0 ]; then
     print_error "No profiles specified"
     echo "Usage: $0 <profile...>"
     echo "Profiles: elastic splunk opensearch clickhouse"
+    exit 1
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+    print_error "docker isn't installed or isn't on your PATH."
+    exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+    print_error "Can't reach the Docker engine. Start it (Docker Desktop: open -a Docker), check that you may use it, and wait until 'docker info' works, then run this again."
     exit 1
 fi
 
